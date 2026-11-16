@@ -10,11 +10,12 @@ Requires Python 3.12 or newer.
 
 ```bash
 cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt   # or requirements.txt for runtime only
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r .\requirements.txt 
 export ANTHROPIC_API_KEY=...          # read by the Anthropic SDK
 export GDDY_PAT=...                   # read by the gddy CLI; gddy must be on PATH
-.venv/bin/uvicorn app.main:create_default_app --factory --reload
+uvicorn app.main:create_default_app --factory --reload
 .venv/bin/python -m pytest            # tests use fakes, no external calls
 ```
 
