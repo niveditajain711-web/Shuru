@@ -6,8 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings, read from `SHURU_*` environment variables or a `.env` file.
 
-    Secrets (`ANTHROPIC_API_KEY`, `GDDY_PAT`) are not listed here: the Anthropic SDK and the
-    `gddy` CLI read them from the environment themselves, so they never pass through our code.
+    Secrets (`ANTHROPIC_API_KEY`, `GDDY_PAT`) are not listed here: `load_dotenv()` in `main.py` puts them
+    in the environment, where the Anthropic SDK and the `gddy` CLI read them, so they never pass
+    through our code.
     """
 
     model_config = SettingsConfigDict(env_prefix="SHURU_", env_file=".env", extra="ignore")
