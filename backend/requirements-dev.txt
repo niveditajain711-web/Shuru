@@ -1,0 +1,4 @@
+# Runtime plus test dependencies.
+-r requirements.txt
+httpx>=0.28,<1
+pytest>=9,<10
