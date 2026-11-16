@@ -43,7 +43,7 @@ Shuru is a guided wizard, not an autonomous agent. Our code runs a fixed sequenc
                          |
                          v
                 +------------------+
-                |  Run store       |  (SQLite or JSON files)
+                |  Run store       |  (SQLite)
                 +------------------+
 ```
 
@@ -64,7 +64,16 @@ Shuru has three external dependencies: the **Anthropic API**, the **GoDaddy `gdd
 | 9 | Connect DNS | Backend (`gddy`) | none | domain resolves to the site |
 | 10 | **Claude call #3** (launch kit) | Backend | low | 5 social posts, welcome email, 30-day checklist |
 
-The wizard shows four screens: **Idea, Domain, Preview, Confirm**. Steps 7 to 10 run after Confirm and stream progress to the same screen.
+The wizard shows four screens: **Idea, Domain, Preview, Confirm**. Steps 7 to 10 run after Confirm, and the same screen polls for progress.
+
+### 3.1 Language: native generation
+
+English and Hindi are both **generated natively by Claude** in Claude call #2, from the same structured brief. Hindi is not machine-translated from the English text.
+
+- **Why:** translated Hindi tends to be stiff and literal. Native generation reads naturally and uses local idiom.
+- **Consistency:** both languages come from the same brief and fields (`hero`, `offer`, `about`, `faq`, `contact`), so facts such as prices, place names and contact details must match. Pydantic validation checks that both languages are present for every field, and contact and numeric values are copied from the brief, not regenerated.
+- **Quality check:** a native Hindi speaker spot-checks a sample of outputs (tone, honorifics, terms), and a few Hindi outputs are kept as fixtures.
+- **Cost:** none extra, since both languages come from one call.
 
 ## 4. Components
 
@@ -73,7 +82,7 @@ The wizard shows four screens: **Idea, Domain, Preview, Confirm**. Steps 7 to 10
 - 4-step wizard with a progress bar; holds only UI state and a `run_id`.
 - Live preview: renders the site template client-side from the content JSON, with an English/Hindi toggle.
 - Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 7.
-- Launch screen polls (or streams) run status and shows the live URL and launch kit.
+- Launch screen polls `GET /runs/{id}` every 2 seconds (see 5.1) and shows the live URL and launch kit.
 
 ### 4.2 Backend (Python + FastAPI)
 
@@ -88,7 +97,7 @@ Thin HTTP layer over a set of services. One endpoint per step, all keyed by `run
 | `packager` | Wraps the HTML in a minimal Node.js app and zips it to the publishing target's requirements. |
 | `publisher` | Interface for publishing a built site (see 4.4). |
 | `dns_service` | Adds the DNS records that point the domain at the published site. |
-| `run_store` | Persists run state and results (SQLite or JSON). |
+| `run_store` | Persists run state and results in SQLite (stdlib `sqlite3`, one file, WAL mode). |
 | `orchestrator` | The fixed state machine that sequences the services (section 5). |
 
 ### 4.3 Claude usage
@@ -136,6 +145,14 @@ CREATED -> BRIEFED -> DOMAINS_LISTED -> DOMAIN_CHOSEN -> SITE_GENERATED
 - **Side-effect steps are idempotent or guarded.** `PURCHASED` is recorded immediately after purchase succeeds, and the purchase step refuses to run if the run is already `PURCHASED`.
 - Long operations (hosting upload, publish, DNS propagation) run as background tasks. The frontend polls `GET /runs/{id}`.
 
+### 5.1 Progress updates: polling
+
+Progress is delivered by **polling**, not SSE. The browser calls `GET /runs/{id}` every 1 to 3 seconds (about 2 seconds) and renders `state`, the current step and any `error`.
+
+- **Why:** it works on every hosting option still under consideration (Node.js, VPS, shared hosting), survives refreshes and flaky networks, and is easy to test with curl. Updates may lag by up to one interval, which is fine for steps that take seconds to minutes.
+- **Requirements:** the endpoint is cheap (a single SQLite read), returns the full current state each time (no event history needed), and the client stops polling at `COMPLETE` or `FAILED`.
+- **Later option:** SSE can be added on top of the same run state if the lag becomes a problem, but it needs a host that allows long-lived connections.
+
 ### Money gate
 
 1. Nothing in steps 1 to 5 can spend money. `purchase` is only reachable from the `APPROVED` state.
@@ -181,7 +198,7 @@ Integration rules:
 
 ## 8. Data model
 
-Minimal, stored in SQLite (or JSON files per run):
+Minimal, stored in a single SQLite database:
 
 | Entity | Key fields |
 | --- | --- |
@@ -224,7 +241,7 @@ Where Shuru runs is intentionally undecided. Whatever is chosen must:
 - Run a Python (FastAPI) process and serve the built React app (or host it separately).
 - Install the `gddy` binary at build time (it installs to `~/.local/bin` and does not modify `PATH`), or use the REST API instead.
 - Allow outbound HTTPS to Anthropic and GoDaddy, and run subprocesses.
-- Provide persistent storage for the run store, or accept SQLite or JSON loss on restart.
+- Provide persistent storage for the run store, or accept SQLite file loss on restart (replay fixtures are committed to the repo).
 - Support environment secrets and long-ish background tasks.
 
 Local development uses GitHub Codespaces, a Vite dev server and `uvicorn`, with the `ote` environment and fixtures. Revisit this section once hosting options are evaluated.
@@ -265,8 +282,13 @@ shuru/
 
 ## 14. Open questions
 
-- Hosting for Shuru itself (section 11).
-- Whether the GoDaddy account has a hosting plan, or the static-host fallback is the default.
-- SQLite versus JSON files for the run store.
-- Streaming (SSE) versus polling for progress updates.
-- Whether Hindi is generated natively by Claude or translated from English content.
+**Open**
+
+- Hosting for Shuru itself (section 11): Node.js or a VPS. To be chosen later.
+- Confirm the GoDaddy hosting plan supports Node.js apps (Day 1 check). A plan exists, so GoDaddy Hosting is the default and the static-host fallback is only for failures. Details to be explored later.
+
+**Decided**
+
+- Run store: **SQLite**, not JSON files.
+- Progress updates: **polling** (section 5.1), not SSE.
+- Hindi: **generated natively** by Claude (section 3.1), not translated from English.
