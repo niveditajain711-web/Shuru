@@ -1,0 +1,26 @@
+[project]
+name = "shuru-backend"
+version = "0.1.0"
+description = "Shuru backend: guided wizard from an idea to a live website."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.8,<3",
+    "fastapi>=0.163,<1",
+    "jinja2>=3.1,<4",
+    "pydantic>=2.14,<3",
+    "pydantic-settings>=2.16,<3",
+    "uvicorn>=0.54,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1",
+    "pytest>=9,<10",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
