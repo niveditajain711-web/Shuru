@@ -1,6 +1,7 @@
 import logging
 
 import anthropic
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -40,6 +41,9 @@ def create_app(orchestrator: Orchestrator) -> FastAPI:
 
 def create_default_app() -> FastAPI:
     """Entry point for uvicorn: `uvicorn app.main:create_default_app --factory`."""
+    # Load secrets (ANTHROPIC_API_KEY, GDDY_PAT) from backend/.env into the process environment,
+    # where the Anthropic SDK and the `gddy` subprocess read them. Real env vars take precedence.
+    load_dotenv()
     settings = Settings()
     setup_logging(settings.log_level)
     return create_app(build_orchestrator(settings))
