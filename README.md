@@ -28,4 +28,5 @@ cd frontend
 npm install
 npm run dev      # http://localhost:5173, forwards /api to the backend on port 8000
 npm run build    # typecheck and production build
+npm test         # unit and integration tests (Vitest, no backend needed)
 ```

@@ -54,6 +54,7 @@ These replace the earlier open questions. Change any that are wrong.
 - **Availability policy:** suggestions are trusted as available; one accurate availability check runs on the chosen domain; the quote is the authoritative check.
 - **Cost transparency before generation:** after choosing a domain the user sees first-year price, renewal price and a "taxes and fees not included" note, and must confirm before Claude generates the site.
 - **Template** is neutral; no brand styling required.
+- **UI decisions:** the logo starts a fresh run (with confirmation); Preview is locked once generated, with "Start over"; navigation is stored in the URL hash.
 
 Still to verify on Day 1: the hosting plan supports Node.js, and, before the hosting step, that the backend host can install `gddy` (see section 9).
 
@@ -110,6 +111,19 @@ The only step that spends money or changes external state. In order:
 - After launch, Claude (Haiku) returns 5 social posts, a welcome email (subject and body) and a 30-day checklist by week.
 - Copyable in the UI. First feature cut if time runs short.
 
+### Navigation and screen design
+
+- **Stepper.** A header stepper shows Idea, Domain, Review and Preview as done, current or upcoming. Finished steps that are still open are clickable. Locked or not-yet-reached steps are disabled and say why ("Choose a domain first", "Locked once your site is written. Start over to change it"). On phones it shows "Step N of 4" and the current label only.
+- **Logo.** Clicking the Shuru logo starts a fresh run. If there is progress, a confirmation explains that the current site stays saved and can be reopened with the browser Back button or its link.
+- **Resume.** The run and step are in the URL (`#/run/{id}/{step}`). Refresh, a pasted link and the browser Back button reopen the right step.
+- **Locked after generation.** Once the site is generated, the domain cannot be changed. Domain and Review are locked; Idea (read-only summary) and Preview stay open. Preview offers **Start over** for a new site.
+- **Idea screen:** one-line intro, a 0 to 500 character counter, clickable example ideas, an English/Hindi switch, and a friendly summary (tagline, audience, tone, name-idea chips).
+- **Domain screen:** a "Looking for something else?" search at the top, domain cards with first-year and renewal price, loading skeletons, a "Try again" button on errors, and the note that prices exclude taxes and fees.
+- **Review screen:** the price shown prominently, the "Nothing is purchased yet" note, a primary Confirm button and a secondary "Pick a different domain" button, and a progress panel while the site is written (about 20 seconds).
+- **Preview screen:** a language switch, a preview that fits the window, "Regenerate (N of 3 left)", and a "What's next" panel (buying the domain is shown as coming soon).
+- **Accessibility:** focus moves to the new screen's heading on every step change, loading and errors are announced to screen readers, the page title follows the step, and Hindi text carries `lang="hi"`.
+- Out of scope for now: dark mode, a "test environment" badge, and "continue your last site" from browser storage.
+
 ### Runs and replay
 
 - Each run saves its brief, domains, site JSON, purchase, hosting and DNS results, live URL and launch kit.
@@ -152,7 +166,7 @@ Packaging has its own tests and must not call GoDaddy.
 - **Recovery:** each run has a state (`brief`, `domain_selected`, `site_ready`, `approved`, `purchased`, `hosted`, `dns_set`, `live`, `failed`). If a step fails after purchase, the run keeps its state so the user can resume without buying twice. A purchase is never retried silently.
 - **Logging:** one line per step with command, exit code, token counts and timestamps.
 - **Performance:** brief and site each under 30 seconds; checking 5 domains under 15 seconds.
-- **Language and access:** Hindi (Devanagari) text, keyboard navigation, correct `lang` attributes on the generated site.
+- **Language and access:** Hindi (Devanagari) text, keyboard navigation, correct `lang` attributes on the generated site and on Hindi text in the wizard, visible focus, focus moved to each new screen, and a layout that works on phones.
 - **Cost:** about $40 building, $10 testing, $5 rehearsals, $45 reserve. Use fixtures for UI work.
 
 ## 9. Architecture

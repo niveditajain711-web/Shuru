@@ -80,8 +80,13 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 
 ### 4.1 Frontend (React + Vite)
 
-- Wizard with a progress bar; holds only UI state and a `run_id`.
-- Live preview: renders the site template client-side from the content JSON, with an English/Hindi toggle.
+- Wizard with a **stepper** (Idea, Domain, Review, Preview) that shows done, current and upcoming steps. Finished steps that are still open are clickable; the rest are disabled with a plain-language hint. On narrow screens only the current step keeps its label, with "Step N of 4" above.
+- **Navigation lives in the URL hash** (`#/run/{id}/{step}`), with no router library. On load, refresh or browser Back, the frontend fetches the run with `GET /runs/{id}` and opens the step the run's state allows. A step that is locked or not reached yet is replaced in the URL by the step the run is at. The frontend holds only UI state; the run itself is the backend's.
+- Step rules mirror the backend state machine: Domain is open until the site is generated, Review only while a domain is chosen, Preview only once the site exists. **Once the site is generated, Domain and Review are locked** (the backend does not allow changing the domain), so Preview offers "Start over".
+- **The Shuru logo starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
+- Domain results come from the run (`run.domains`), so returning to the Domain step does not repeat the external search.
+- Preview: the server-rendered site HTML in a sandboxed iframe, with an English/Hindi toggle and "Regenerate (N of 3 left)".
+- Loading states (spinner and skeletons) announce themselves to screen readers; each new screen moves focus to its heading and updates the page title.
 - Review-cost screen (after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
 - Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 8.
 - Launch screen polls `GET /runs/{id}` every 2 seconds (see 5.1) and shows the live URL and launch kit.
@@ -274,7 +279,7 @@ shuru/
     tests/
     fixtures/            # cached runs for replay
   frontend/
-    src/                 # wizard, preview, API client
+    src/                 # wizard screens, stepper, URL routing, API client, tests (Vitest)
   README.md
 ```
 
@@ -283,6 +288,7 @@ shuru/
 - Unit tests for each service with mocked GoDaddy HTTP responses (recorded from real calls) and a fake Claude client.
 - Contract tests for Claude output models using recorded fixtures.
 - State machine tests, including "purchase cannot run without approval" and "purchase cannot run twice".
+- Frontend: unit tests for the navigation rules and route parsing, plus integration tests (Vitest, Testing Library) that render the whole app against a mocked API: the full flow, stepper locking, resume from the URL, the logo confirmation and browser Back.
 - An end-to-end run against the GoDaddy test environment, plus one real run with a cheap domain before any demo.
 
 ## 14. Open questions
@@ -297,3 +303,6 @@ shuru/
 - Run store: **SQLite**, not JSON files.
 - Progress updates: **polling** (section 5.1), not SSE.
 - Hindi: **generated natively** by Claude (section 3.1), not translated from English.
+- Logo click: **starts a fresh run** (with confirmation); the clickable Idea step is how the user revisits the current summary.
+- Preview: **locked** once generated; "Start over" is the way to change the domain. Unlocking later is possible with a small backend change (swap the domain and re-render without calling Claude).
+- Navigation: **URL hash** routing, no router library.

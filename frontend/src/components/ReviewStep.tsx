@@ -3,6 +3,7 @@ import type { Run } from "../api/types";
 import { formatPrice } from "../format";
 import { useAction } from "../hooks/useAction";
 import { ErrorMessage } from "./ErrorMessage";
+import { Loading } from "./Loading";
 
 interface Props {
   run: Run;
@@ -24,32 +25,39 @@ export function ReviewStep({ run, onConfirmed, onBack }: Props) {
   return (
     <section className="card">
       <h1>Review your domain</h1>
-      <dl>
-        <dt>Domain</dt>
-        <dd>
-          <strong>{domain.name}</strong>
-        </dd>
-        <dt>First year</dt>
-        <dd>{formatPrice(domain.price, domain.currency)}</dd>
+      <p className="lead">Check the cost before we write your site. You'll see a preview next.</p>
+
+      <div className="summary">
+        <p className="summary-domain">{domain.name}</p>
+        <p className="summary-price">
+          <strong>{formatPrice(domain.price, domain.currency)}</strong>
+          <span> first year</span>
+        </p>
         {domain.renewal_price !== null && (
-          <>
-            <dt>Renews at</dt>
-            <dd>{formatPrice(domain.renewal_price, domain.currency)} per year</dd>
-          </>
+          <p className="hint">Renews at {formatPrice(domain.renewal_price, domain.currency)} per year</p>
         )}
-      </dl>
-      <p>
-        Prices exclude taxes and fees and may change until you buy. Nothing is purchased yet: we only build a preview
-        of your site.
+      </div>
+
+      <p className="notice">
+        <strong>Nothing is purchased yet.</strong> Prices exclude taxes and fees and may change until you buy.
       </p>
 
       <ErrorMessage message={error} />
-      <button type="button" onClick={handleConfirm} disabled={loading}>
-        {loading ? "Writing your site… this can take about 20 seconds" : "Confirm and build my site"}
-      </button>
-      <button type="button" onClick={onBack} disabled={loading}>
-        Pick a different domain
-      </button>
+      {loading ? (
+        <Loading
+          message="Writing your site in English and Hindi…"
+          detail="This takes about 20 seconds. Please keep this page open."
+        />
+      ) : (
+        <div className="actions">
+          <button type="button" onClick={handleConfirm}>
+            Confirm and build my site
+          </button>
+          <button type="button" className="secondary" onClick={onBack}>
+            Pick a different domain
+          </button>
+        </div>
+      )}
     </section>
   );
 }

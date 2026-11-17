@@ -48,6 +48,8 @@ function post<T>(path: string, body?: unknown): Promise<T> {
 export const api = {
   createRun: (idea: string, lang: Lang) => post<Run>("/runs", { idea, lang }),
 
+  getRun: (runId: string) => request<Run>(`/runs/${runId}`),
+
   listDomains: (runId: string, keyword?: string) => {
     const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : "";
     return request<Run>(`/runs/${runId}/domains${query}`);
