@@ -3,7 +3,12 @@ import uuid
 from datetime import UTC, datetime
 
 from app.config import Settings
-from app.errors import DomainNotAvailableError, InvalidRunStateError, RegenerationLimitError
+from app.errors import (
+    ConfirmationMismatchError,
+    DomainNotAvailableError,
+    InvalidRunStateError,
+    RegenerationLimitError,
+)
 from app.models import Lang, Run, RunState
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
@@ -18,8 +23,10 @@ class Orchestrator:
 
     BRIEFED -> DOMAINS_LISTED -> DOMAIN_CHOSEN -> SITE_GENERATED
 
-    Each step checks the run's state first, saves the new state before slow side effects where
-    that lets the user retry, and never moves backwards. Nothing here can spend money.
+    Each step checks the run's state first and saves the new state before slow side effects where
+    that lets the user retry. The user may change their mind about the domain (DOMAIN_CHOSEN back
+    to DOMAINS_LISTED), but once the site is generated nothing moves backwards.
+    Nothing here can spend money.
     """
 
     def __init__(
@@ -58,17 +65,19 @@ class Orchestrator:
     def list_domains(self, run_id: str, keyword: str | None = None) -> Run:
         """Step 2: find available domains for the brief's names, or for the user's own keyword."""
         run = self._store.get(run_id)
-        self._require_state(run, RunState.BRIEFED, RunState.DOMAINS_LISTED)
+        self._require_state(run, RunState.BRIEFED, RunState.DOMAINS_LISTED, RunState.DOMAIN_CHOSEN)
 
         run.domains = self._domains.find_available([keyword] if keyword else run.brief.name_ideas)
+        run.domain = None
         run.state = RunState.DOMAINS_LISTED
         self._save(run)
         return run
 
     def choose_domain(self, run_id: str, domain: str) -> Run:
-        """Step 3: record the chosen domain, then generate the site content for it.
+        """Step 3: record the chosen domain with its fresh price. No Claude call yet.
 
-        If generation fails, the run stays DOMAIN_CHOSEN and the same call can be retried.
+        The domain is re-checked against the registry once. The user then reviews the cost and
+        confirms with `generate_site`, so Claude only runs for a domain they are happy to buy.
         """
         run = self._store.get(run_id)
         self._require_state(run, RunState.DOMAINS_LISTED, RunState.DOMAIN_CHOSEN)
@@ -78,11 +87,24 @@ class Orchestrator:
             logger.warning("domain not in listed offers run_id=%s domain=%s", run_id, domain)
             raise DomainNotAvailableError()
 
-        run.domain = chosen
+        run.domain = self._domains.confirm_available(chosen.name)
         run.state = RunState.DOMAIN_CHOSEN
         self._save(run)
+        return run
 
-        run.site = self._claude.generate_site(run.brief, chosen.name)
+    def generate_site(self, run_id: str, domain: str, price: float) -> Run:
+        """Step 4: the user confirmed the cost, so generate the site content.
+
+        `domain` and `price` are what the user saw; they must match the stored choice. If generation
+        fails, the run stays DOMAIN_CHOSEN and the same call can be retried.
+        """
+        run = self._store.get(run_id)
+        self._require_state(run, RunState.DOMAIN_CHOSEN)
+        if run.domain is None or run.domain.name != domain or run.domain.price != price:
+            logger.warning("confirmation does not match run_id=%s domain=%s price=%s", run_id, domain, price)
+            raise ConfirmationMismatchError()
+
+        run.site = self._claude.generate_site(run.brief, run.domain.name)
         run.state = RunState.SITE_GENERATED
         self._save(run)
         return run

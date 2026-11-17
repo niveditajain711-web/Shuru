@@ -12,7 +12,12 @@ def test_full_flow(client):
     assert listed["domains"][0]["name"] == "achaar1.com"
 
     chosen = client.post(f"/api/runs/{run_id}/domain", json={"domain": "achaar1.com"}).json()
-    assert chosen["state"] == "site_generated"
+    assert chosen["state"] == "domain_chosen"
+    assert chosen["domain"]["renewal_price"] == 15.0
+    assert chosen["site"] is None
+
+    generated = client.post(f"/api/runs/{run_id}/generate", json={"domain": "achaar1.com", "price": 12.0}).json()
+    assert generated["state"] == "site_generated"
 
     preview = client.get(f"/api/runs/{run_id}/preview", params={"lang": "hi"})
     assert preview.status_code == 200
@@ -56,6 +61,28 @@ def test_out_of_order_step_returns_conflict(client):
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "invalid_run_state"
+
+
+def test_mismatched_confirmation_returns_conflict(client):
+    run_id = create(client).json()["id"]
+    client.get(f"/api/runs/{run_id}/domains")
+    client.post(f"/api/runs/{run_id}/domain", json={"domain": "achaar1.com"})
+
+    response = client.post(f"/api/runs/{run_id}/generate", json={"domain": "achaar1.com", "price": 1.0})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "confirmation_mismatch"
+
+
+def test_taken_domain_returns_conflict(client, domains):
+    run_id = create(client).json()["id"]
+    client.get(f"/api/runs/{run_id}/domains")
+    domains.taken = True
+
+    response = client.post(f"/api/runs/{run_id}/domain", json={"domain": "achaar1.com"})
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "domain_taken"
 
 
 def test_claude_failure_returns_bad_gateway(client, claude):

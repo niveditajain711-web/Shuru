@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 
-from app.models import DOMAIN_LABEL_PATTERN, ChooseDomainRequest, CreateRunRequest, Lang, Run
+from app.models import DOMAIN_LABEL_PATTERN, ChooseDomainRequest, CreateRunRequest, GenerateSiteRequest, Lang, Run
 from app.orchestrator import Orchestrator
 
 
@@ -38,6 +38,11 @@ def list_domains(
 @router.post("/runs/{run_id}/domain", response_model=Run)
 def choose_domain(run_id: str, body: ChooseDomainRequest, orchestrator: OrchestratorDep) -> Run:
     return orchestrator.choose_domain(run_id, body.domain)
+
+
+@router.post("/runs/{run_id}/generate", response_model=Run)
+def generate_site(run_id: str, body: GenerateSiteRequest, orchestrator: OrchestratorDep) -> Run:
+    return orchestrator.generate_site(run_id, body.domain, body.price)
 
 
 @router.post("/runs/{run_id}/regenerate", response_model=Run)

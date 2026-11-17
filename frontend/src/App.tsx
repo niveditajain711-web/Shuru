@@ -3,6 +3,7 @@ import type { Run } from "./api/types";
 import { DomainStep } from "./components/DomainStep";
 import { IdeaStep } from "./components/IdeaStep";
 import { PreviewStep } from "./components/PreviewStep";
+import { ReviewStep } from "./components/ReviewStep";
 import { ProgressBar, type Step } from "./components/ProgressBar";
 
 export function App() {
@@ -10,6 +11,11 @@ export function App() {
   const [run, setRun] = useState<Run | null>(null);
 
   function handleChosen(updated: Run) {
+    setRun(updated);
+    setStep("review");
+  }
+
+  function handleConfirmed(updated: Run) {
     setRun(updated);
     setStep("preview");
   }
@@ -23,6 +29,9 @@ export function App() {
       <main>
         {step === "idea" && <IdeaStep run={run} onCreated={setRun} onContinue={() => setStep("domain")} />}
         {step === "domain" && run && <DomainStep run={run} onChosen={handleChosen} />}
+        {step === "review" && run && (
+          <ReviewStep run={run} onConfirmed={handleConfirmed} onBack={() => setStep("domain")} />
+        )}
         {step === "preview" && run && <PreviewStep run={run} onUpdated={setRun} />}
       </main>
     </div>

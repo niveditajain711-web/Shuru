@@ -2,7 +2,7 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
-from app.errors import GddyError
+from app.errors import DomainTakenError, GddyError
 from app.models import DomainOffer
 from app.services.gddy_client import GddyClient
 
@@ -11,30 +11,41 @@ logger = logging.getLogger(__name__)
 _TLDS = ("com", "net", "io")
 _SUGGEST_LIMIT = 5
 _MAX_NAMES = 3  # how many name ideas are searched
-_MAX_CANDIDATES = 10  # how many suggested domains are checked for availability
+_MAX_RESULTS = 10  # how many suggested domains are shown
 
 
 class DomainService:
-    """Finds domains that are available to register, with their prices."""
+    """Finds domains to register, with their indicative prices.
+
+    Suggestions are available by contract, so they are trusted as they are. The chosen domain is
+    re-checked once (`confirm_available`), and the quote is the final authority.
+    """
 
     def __init__(self, gddy: GddyClient) -> None:
         self._gddy = gddy
 
     def find_available(self, names: list[str]) -> list[DomainOffer]:
-        """Suggest domains for the first few names, then keep those that are available.
+        """Suggest domains for the first few names and merge them, without duplicates.
 
-        Individual failed calls are skipped so one bad domain does not hide the others.
-        Raises GddyError only when every call of a stage failed.
+        A failed search for one name is skipped so it does not hide the others.
+        Raises GddyError only when every search failed.
         """
-        suggested = self._suggest(names[:_MAX_NAMES])
-        candidates = list(dict.fromkeys(suggested))[:_MAX_CANDIDATES]
+        results = self._in_parallel(lambda name: self._gddy.suggest(name, _TLDS, _SUGGEST_LIMIT), names[:_MAX_NAMES])
+        unique: dict[str, DomainOffer] = {}
+        for offers in results:
+            for offer in offers:
+                unique.setdefault(offer.name, offer)
+        return list(unique.values())[:_MAX_RESULTS]
 
-        results = self._in_parallel(self._gddy.check_availability, candidates)
-        return [offer for offer in results if offer is not None]
+    def confirm_available(self, domain: str) -> DomainOffer:
+        """Check the chosen domain against the registry. Returns it with its fresh price.
 
-    def _suggest(self, names: list[str]) -> list[str]:
-        results = self._in_parallel(lambda name: self._gddy.suggest(name, _TLDS, _SUGGEST_LIMIT), names)
-        return [domain for result in results for domain in result]
+        Raises DomainTakenError if it can no longer be registered.
+        """
+        offer = self._gddy.check_availability(domain)
+        if offer is None:
+            raise DomainTakenError()
+        return offer
 
     @staticmethod
     def _in_parallel[A, R](fn: Callable[[A], R], items: list[A]) -> list[R]:

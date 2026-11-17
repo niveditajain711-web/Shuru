@@ -24,7 +24,9 @@ def build_orchestrator(settings: Settings) -> Orchestrator:
     return Orchestrator(
         store=RunStore(settings.db_path),
         claude=ClaudeService(anthropic.Anthropic(), settings),
-        domains=DomainService(GddyClient(settings.gddy_binary, settings.gddy_env, settings.gddy_timeout_seconds)),
+        domains=DomainService(
+            GddyClient(settings.gddy_read_base_url, settings.gddy_pat.get_secret_value(), settings.gddy_timeout_seconds)
+        ),
         sites=SiteService(),
         settings=settings,
     )
@@ -42,10 +44,13 @@ def create_app(orchestrator: Orchestrator) -> FastAPI:
 def create_default_app() -> FastAPI:
     """Entry point for uvicorn: `uvicorn app.main:create_default_app --factory`."""
     # Load secrets (ANTHROPIC_API_KEY, GDDY_PAT) from backend/.env into the process environment,
-    # where the Anthropic SDK and the `gddy` subprocess read them. Real env vars take precedence.
+    # where the Anthropic SDK and our settings read them. Real env vars take precedence.
     load_dotenv()
     settings = Settings()
     setup_logging(settings.log_level)
+    if not settings.gddy_pat.get_secret_value():
+        logger.warning("GDDY_PAT is not set; GoDaddy calls will fail")
+    logger.info("GoDaddy read base url=%s", settings.gddy_read_base_url)
     return create_app(build_orchestrator(settings))
 
 

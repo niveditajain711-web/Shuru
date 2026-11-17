@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
-# Name ideas and keywords become part of `gddy` arguments, so they are restricted to
+# Name ideas and keywords become GoDaddy search queries, so they are restricted to
 # characters that are valid in a domain label.
 DOMAIN_LABEL_PATTERN = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
 DOMAIN_PATTERN = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
@@ -81,8 +81,11 @@ class SiteContent(BaseModel):
 
 
 class DomainOffer(BaseModel):
+    """A domain with its indicative first-year price. Prices exclude taxes and fees."""
+
     name: DomainName
     price: float
+    renewal_price: float | None = None
     currency: str
 
 
@@ -113,3 +116,10 @@ class CreateRunRequest(BaseModel):
 
 class ChooseDomainRequest(BaseModel):
     domain: DomainName
+
+
+class GenerateSiteRequest(BaseModel):
+    """What the user confirmed on the cost review screen. Must match the chosen domain."""
+
+    domain: DomainName
+    price: float

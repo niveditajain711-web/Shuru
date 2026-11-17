@@ -38,6 +38,22 @@ class DomainNotAvailableError(AppError):
         super().__init__("That domain isn't in the list of available domains. Please pick one from the list.")
 
 
+class DomainTakenError(AppError):
+    status_code = 409
+    code = "domain_taken"
+
+    def __init__(self) -> None:
+        super().__init__("Sorry, that domain was just taken. Please pick another one.")
+
+
+class ConfirmationMismatchError(AppError):
+    status_code = 409
+    code = "confirmation_mismatch"
+
+    def __init__(self) -> None:
+        super().__init__("The domain or price changed. Please review it again.")
+
+
 class RegenerationLimitError(AppError):
     status_code = 409
     code = "regeneration_limit"

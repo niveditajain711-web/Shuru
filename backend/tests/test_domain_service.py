@@ -1,14 +1,14 @@
 import pytest
 
-from app.errors import GddyError
+from app.errors import DomainTakenError, GddyError
 from app.models import DomainOffer
 from app.services.domain_service import DomainService
 
 
 class FakeGddy:
-    def __init__(self, suggestions, availability) -> None:
-        self.suggestions = suggestions
-        self.availability = availability
+    def __init__(self, suggestions=None, availability=None) -> None:
+        self.suggestions = suggestions or {}
+        self.availability = availability or {}
         self.suggest_queries: list[str] = []
 
     def suggest(self, query, tlds, limit):
@@ -25,58 +25,63 @@ class FakeGddy:
         return result
 
 
-def offer(name: str) -> DomainOffer:
-    return DomainOffer(name=name, price=10.0, currency="USD")
+def offer(name: str, price: float = 10.0) -> DomainOffer:
+    return DomainOffer(name=name, price=price, currency="USD")
 
 
-def test_merges_dedupes_and_keeps_only_available():
-    gddy = FakeGddy(
-        suggestions={"a": ["a.com", "shared.com"], "b": ["shared.com", "b.com"]},
-        availability={"a.com": offer("a.com"), "shared.com": None, "b.com": offer("b.com")},
-    )
+def test_merges_and_dedupes_suggestions_keeping_the_first():
+    gddy = FakeGddy({"a": [offer("a.com"), offer("shared.com", 1)], "b": [offer("shared.com", 2), offer("b.com")]})
 
-    assert DomainService(gddy).find_available(["a", "b"]) == [offer("a.com"), offer("b.com")]
+    result = DomainService(gddy).find_available(["a", "b"])
+
+    assert result == [offer("a.com"), offer("shared.com", 1), offer("b.com")]
+
+
+def test_suggestions_are_not_rechecked_for_availability():
+    gddy = FakeGddy({"a": [offer("a.com")]})  # check_availability would raise KeyError
+
+    assert DomainService(gddy).find_available(["a"]) == [offer("a.com")]
 
 
 def test_only_the_first_names_are_searched():
-    gddy = FakeGddy({n: [] for n in "abcde"}, {})
+    gddy = FakeGddy({n: [] for n in "abcde"})
 
     DomainService(gddy).find_available(list("abcde"))
 
     assert sorted(gddy.suggest_queries) == ["a", "b", "c"]
 
 
+def test_results_are_capped():
+    gddy = FakeGddy({"a": [offer(f"a{i}.com") for i in range(15)]})
+
+    assert len(DomainService(gddy).find_available(["a"])) == 10
+
+
 def test_no_suggestions_returns_empty_list():
-    assert DomainService(FakeGddy({"a": []}, {})).find_available(["a"]) == []
-
-
-def test_a_failed_check_is_skipped():
-    gddy = FakeGddy(
-        suggestions={"a": ["a.com", "b.com"]},
-        availability={"a.com": GddyError(), "b.com": offer("b.com")},
-    )
-
-    assert DomainService(gddy).find_available(["a"]) == [offer("b.com")]
+    assert DomainService(FakeGddy({"a": []})).find_available(["a"]) == []
 
 
 def test_a_failed_suggestion_is_skipped():
-    gddy = FakeGddy(
-        suggestions={"a": GddyError(), "b": ["b.com"]},
-        availability={"b.com": offer("b.com")},
-    )
+    gddy = FakeGddy({"a": GddyError(), "b": [offer("b.com")]})
 
     assert DomainService(gddy).find_available(["a", "b"]) == [offer("b.com")]
 
 
 def test_error_when_every_suggestion_fails():
-    gddy = FakeGddy({"a": GddyError(), "b": GddyError()}, {})
+    gddy = FakeGddy({"a": GddyError(), "b": GddyError()})
 
     with pytest.raises(GddyError):
         DomainService(gddy).find_available(["a", "b"])
 
 
-def test_error_when_every_check_fails():
-    gddy = FakeGddy({"a": ["a.com", "b.com"]}, {"a.com": GddyError(), "b.com": GddyError()})
+def test_confirm_available_returns_the_fresh_offer():
+    gddy = FakeGddy(availability={"a.com": offer("a.com", 11.0)})
 
-    with pytest.raises(GddyError):
-        DomainService(gddy).find_available(["a"])
+    assert DomainService(gddy).confirm_available("a.com") == offer("a.com", 11.0)
+
+
+def test_confirm_available_rejects_a_taken_domain():
+    gddy = FakeGddy(availability={"a.com": None})
+
+    with pytest.raises(DomainTakenError):
+        DomainService(gddy).confirm_available("a.com")

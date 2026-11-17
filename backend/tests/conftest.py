@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.errors import ClaudeError, GddyError
+from app.errors import ClaudeError, DomainTakenError, GddyError
 from app.main import create_app
 from app.models import Brief, DomainOffer, Lang, SiteContent
 from app.orchestrator import Orchestrator
@@ -51,8 +51,10 @@ class FakeClaude:
 
 class FakeDomains:
     def __init__(self) -> None:
-        self.offers = [DomainOffer(name="achaar1.com", price=12.0, currency="USD")]
+        self.offers = [DomainOffer(name="achaar1.com", price=12.0, renewal_price=15.0, currency="USD")]
         self.fail = False
+        self.taken = False
+        self.fresh_price = 12.0
         self.last_names: list[str] = []
 
     def find_available(self, names: list[str]) -> list[DomainOffer]:
@@ -60,6 +62,11 @@ class FakeDomains:
         if self.fail:
             raise GddyError()
         return self.offers
+
+    def confirm_available(self, domain: str) -> DomainOffer:
+        if self.taken:
+            raise DomainTakenError()
+        return DomainOffer(name=domain, price=self.fresh_price, renewal_price=15.0, currency="USD")
 
 
 @pytest.fixture

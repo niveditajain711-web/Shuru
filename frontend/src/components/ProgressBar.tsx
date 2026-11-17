@@ -1,7 +1,7 @@
-export const STEPS = ["Idea", "Domain", "Preview"] as const;
-export type Step = "idea" | "domain" | "preview";
+export const STEPS = ["Idea", "Domain", "Review", "Preview"] as const;
+export type Step = "idea" | "domain" | "review" | "preview";
 
-const STEP_ORDER: Step[] = ["idea", "domain", "preview"];
+const STEP_ORDER: Step[] = ["idea", "domain", "review", "preview"];
 
 export function ProgressBar({ current }: { current: Step }) {
   const currentIndex = STEP_ORDER.indexOf(current);

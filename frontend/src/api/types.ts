@@ -13,7 +13,8 @@ export interface Brief {
 
 export interface DomainOffer {
   name: string;
-  price: number;
+  price: number; // first-year price, excluding taxes and fees
+  renewal_price: number | null;
   currency: string;
 }
 

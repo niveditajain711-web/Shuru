@@ -55,6 +55,9 @@ export const api = {
 
   chooseDomain: (runId: string, domain: string) => post<Run>(`/runs/${runId}/domain`, { domain }),
 
+  generateSite: (runId: string, domain: string, price: number) =>
+    post<Run>(`/runs/${runId}/generate`, { domain, price }),
+
   regenerateSite: (runId: string) => post<Run>(`/runs/${runId}/regenerate`),
 
   previewUrl: (runId: string, lang: Lang, version: number) =>

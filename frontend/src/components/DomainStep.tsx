@@ -1,16 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import type { DomainOffer, Run } from "../api/types";
+import { formatPrice } from "../format";
 import { useAction } from "../hooks/useAction";
 import { ErrorMessage } from "./ErrorMessage";
 
 interface Props {
   run: Run;
   onChosen: (run: Run) => void;
-}
-
-function formatPrice({ price, currency }: DomainOffer): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(price);
 }
 
 export function DomainStep({ run, onChosen }: Props) {
@@ -64,7 +61,7 @@ export function DomainStep({ run, onChosen }: Props) {
                 onChange={() => setSelected(domain.name)}
               />
               <span>{domain.name}</span>
-              <span className="price">{formatPrice(domain)}</span>
+              <span className="price">{formatPrice(domain.price, domain.currency)}</span>
             </label>
           ))}
         </fieldset>
@@ -76,7 +73,7 @@ export function DomainStep({ run, onChosen }: Props) {
         <>
           <ErrorMessage message={chooseError} />
           <button type="button" onClick={handleChoose} disabled={!selected || choosing}>
-            {choosing ? "Writing your site… this can take about 20 seconds" : "Choose this domain"}
+            {choosing ? "Checking availability…" : "Choose this domain"}
           </button>
         </>
       )}

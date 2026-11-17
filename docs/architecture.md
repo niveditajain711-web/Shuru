@@ -4,7 +4,7 @@
 
 Shuru is a guided wizard, not an autonomous agent. Our code runs a fixed sequence of steps, and Claude is used as a **generator** at three points, each returning validated JSON. This keeps the system deterministic, testable and cheap.
 
-> **Status:** design. No code exists yet. This document is the target architecture; see `LaunchPad Simplified Build Plan.md` for the original plan and schedule (the project was called LaunchPad there).
+> **Status:** milestone 1 (idea, domain, cost review, preview) is built; the rest is design. This document is the target architecture; see `LaunchPad Simplified Build Plan.md` for the original plan and schedule (the project was called LaunchPad there).
 >
 > **Out of scope for now:** where Shuru itself is hosted and deployed. Section 11 lists the constraints that decision will have to satisfy.
 
@@ -37,8 +37,8 @@ Shuru is a guided wizard, not an autonomous agent. Our code runs a fixed sequenc
                 |  FastAPI backend | ----> | Claude API (Anthropic)|
                 |  (orchestrator)  |       +-----------------------+
                 |                  |       +-----------------------+
-                |                  | ----> | GoDaddy (via gddy CLI)|
-                |                  |       |  domains, DNS, hosting|
+                |                  | ----> | GoDaddy v3 REST API   |
+                |                  |       |  domains, DNS         |
                 +--------+---------+       +-----------------------+
                          |
                          v
@@ -47,7 +47,7 @@ Shuru is a guided wizard, not an autonomous agent. Our code runs a fixed sequenc
                 +------------------+
 ```
 
-Shuru has three external dependencies: the **Anthropic API**, the **GoDaddy `gddy` CLI** (REST API as fallback), and a **site publishing target** (GoDaddy Hosting by default, behind an interface so it can be swapped).
+Shuru has three external dependencies: the **Anthropic API**, the **GoDaddy Domain Lifecycle REST API (v3)**, and a **site publishing target** (GoDaddy Hosting by default, behind an interface so it can be swapped).
 
 ## 3. The flow
 
@@ -55,16 +55,17 @@ Shuru has three external dependencies: the **Anthropic API**, the **GoDaddy `gdd
 | --- | --- | --- | --- | --- |
 | 1 | Describe idea, pick language | User | none | `idea`, `lang` |
 | 2 | **Claude call #1** (brief) | Backend | low | audience, tone, tagline, 8 to 10 name ideas |
-| 3 | Domain search and pricing | Backend (`gddy`) | none | candidate domains with availability and price |
-| 4 | **Claude call #2** (site content) | Backend | medium | structured JSON: hero, offer, about, FAQ, contact |
-| 5 | Preview | Frontend | none | live render of the template with the JSON |
-| 6 | **Approve** (money gate) | User | none | explicit approval of domain, price, preview |
-| 7 | Quote, purchase | Backend (`gddy`) | **real money** | registered domain |
-| 8 | Package, upload, publish site | Backend | none | live site on the publishing target |
-| 9 | Connect DNS | Backend (`gddy`) | none | domain resolves to the site |
-| 10 | **Claude call #3** (launch kit) | Backend | low | 5 social posts, welcome email, 30-day checklist |
+| 3 | Domain search and pricing | Backend (GoDaddy REST) | none | suggested domains with indicative prices |
+| 4 | **Choose and review cost** | User | none | one accurate availability re-check, then first-year price, renewal price and a note that taxes and fees are excluded; the user confirms or picks another domain |
+| 5 | **Claude call #2** (site content) | Backend | medium | structured JSON: hero, offer, about, FAQ, contact. Runs only after the user confirms the cost in step 4 |
+| 6 | Preview | Frontend | none | live render of the template with the JSON |
+| 7 | **Approve** (money gate) | User | none | explicit approval of domain, price, preview |
+| 8 | Quote, purchase | Backend (GoDaddy REST) | **real money** | registered domain |
+| 9 | Package, upload, publish site | Backend | none | live site on the publishing target |
+| 10 | Connect DNS | Backend (GoDaddy REST) | none | domain resolves to the site |
+| 11 | **Claude call #3** (launch kit) | Backend | low | 5 social posts, welcome email, 30-day checklist |
 
-The wizard shows four screens: **Idea, Domain, Preview, Confirm**. Steps 7 to 10 run after Confirm, and the same screen polls for progress.
+The wizard shows these screens: **Idea, Domain, Review cost, Preview, Confirm**. Steps 8 to 11 run after Confirm, and the same screen polls for progress.
 
 ### 3.1 Language: native generation
 
@@ -79,9 +80,10 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 
 ### 4.1 Frontend (React + Vite)
 
-- 4-step wizard with a progress bar; holds only UI state and a `run_id`.
+- Wizard with a progress bar; holds only UI state and a `run_id`.
 - Live preview: renders the site template client-side from the content JSON, with an English/Hindi toggle.
-- Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 7.
+- Review-cost screen (after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
+- Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 8.
 - Launch screen polls `GET /runs/{id}` every 2 seconds (see 5.1) and shows the live URL and launch kit.
 
 ### 4.2 Backend (Python + FastAPI)
@@ -91,7 +93,7 @@ Thin HTTP layer over a set of services. One endpoint per step, all keyed by `run
 | Service | Responsibility |
 | --- | --- |
 | `claude_service` | The three Claude calls. Prompts, model choice, `max_tokens`, prompt caching, Pydantic validation, one retry on invalid JSON. |
-| `gddy_client` | Wraps the `gddy` CLI: builds commands, runs them with timeouts, parses JSON output, maps errors. Only module that spawns processes. |
+| `gddy_client` | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses, converts minor-unit prices, maps errors to typed exceptions. Only module that calls GoDaddy. |
 | `domain_service` | Suggest, availability, quote, purchase. Owns quote-token expiry handling. |
 | `site_service` | Renders content JSON through the fixed template to static HTML. |
 | `packager` | Wraps the HTML in a minimal Node.js app and zips it to the publishing target's requirements. |
@@ -127,7 +129,7 @@ class Publisher(Protocol):
 
 Planned implementations:
 
-- **GoDaddyHostingPublisher** (default): `gddy hosting app create`, `source upload`, `subscription attach`, `deployment publish`, polling each operation. Needs a Node.js zip with `package.json` (name, version), `build` and `start` scripts, an app that listens on `PORT`, runtime packages in `dependencies`, and no `node_modules`.
+- **GoDaddyHostingPublisher** (default, built later): the v3 domains API has no hosting endpoints, so this is the one place that will use the `gddy` CLI (or another GoDaddy hosting API if one is confirmed). It lives in its own module and is the only code that may spawn processes: `gddy hosting app create`, `source upload`, `subscription attach`, `deployment publish`, polling each operation. Needs a Node.js zip with `package.json` (name, version), `build` and `start` scripts, an app that listens on `PORT`, runtime packages in `dependencies`, and no `node_modules`.
 - **StaticHostPublisher** (fallback): a free static host (Cloudflare Pages, Netlify or Vercel) with GoDaddy DNS pointing at it.
 
 ## 5. Orchestration and state
@@ -141,6 +143,7 @@ CREATED -> BRIEFED -> DOMAINS_LISTED -> DOMAIN_CHOSEN -> SITE_GENERATED
                           (any state) -> FAILED
 ```
 
+- `DOMAIN_CHOSEN` is a resting state: choosing a domain only records it (after an accurate availability re-check) and returns the fresh price. Claude call #2 starts only when the user confirms the cost (`POST /runs/{id}/generate`), so tokens are not spent on a domain the user may reject.
 - Transitions are only forward and are persisted before the side effect where possible, so a retry can resume.
 - **Side-effect steps are idempotent or guarded.** `PURCHASED` is recorded immediately after purchase succeeds, and the purchase step refuses to run if the run is already `PURCHASED`.
 - Long operations (hosting upload, publish, DNS propagation) run as background tasks. The frontend polls `GET /runs/{id}`.
@@ -158,15 +161,16 @@ Progress is delivered by **polling**, not SSE. The browser calls `GET /runs/{id}
 1. Nothing in steps 1 to 5 can spend money. `purchase` is only reachable from the `APPROVED` state.
 2. `APPROVED` is set only by an explicit `POST /runs/{id}/approve` carrying the exact domain and price the user saw.
 3. The backend gets a **fresh quote** right after approval, because quote tokens expire in about 10 minutes. If the quoted price differs from the approved price, the run stops and asks again.
-4. Purchase uses `--quote-token <token> --agree --confirm`, after fetching required agreements for the TLD.
+4. Purchase is `POST /registrations` with the `quoteToken` and the accepted agreements, after fetching them for the TLD. It returns 202; the backend polls the registration until `COMPLETED` or `FAILED`.
 
 ## 6. API sketch
 
 | Method and path | Purpose |
 | --- | --- |
 | `POST /runs` | Create a run from `{idea, lang}`; runs Claude call #1; returns brief and names |
-| `GET /runs/{id}/domains` | Suggest and check domains with prices |
-| `POST /runs/{id}/domain` | Choose a domain; triggers Claude call #2; returns site content |
+| `GET /runs/{id}/domains` | Suggest domains with indicative prices (or a single user-typed keyword) |
+| `POST /runs/{id}/domain` | Choose a domain; re-checks availability once and refreshes its price; no Claude call; returns the run with the chosen offer |
+| `POST /runs/{id}/generate` | User confirmed the cost; triggers Claude call #2; returns site content |
 | `GET /runs/{id}/preview` | Rendered HTML (or content JSON) for the preview |
 | `POST /runs/{id}/approve` | Money gate; starts purchase, publish, DNS, launch kit as a background job |
 | `GET /runs/{id}` | Status, current step, errors, and final results (URL, kit) |
@@ -176,25 +180,25 @@ Exact shapes will be defined as Pydantic models, shared with the frontend throug
 
 ## 7. GoDaddy integration
 
-The backend drives the `gddy` CLI. Key commands:
+The backend calls the **GoDaddy Domain Lifecycle Management API v3** over HTTPS (spec: `docs/gddy-api-spec.json`). Base URL: `https://api.{env}.com/v3/domains`.
 
-| Step | Command |
+| Step | Endpoint |
 | --- | --- |
-| Suggest | `gddy domain suggest "<query>" --tlds com,net,io --limit 5` |
-| Check | `gddy domain available <domain>` (`--check-type full` for definitive) |
-| Quote | `gddy domain quote <domain>` |
-| Agreements | `gddy domain agreements --tld <tld>` |
-| Purchase | `gddy domain purchase --quote-token <token> --agree --confirm` |
-| DNS | `gddy dns list / add / set / delete` (`--dry-run` to preview) |
-| Hosting | `gddy hosting app create`, `source upload`, `subscription attach`, `deployment publish` |
+| Suggest | `GET /suggestions?query=&tlds=&pageSize=` returns `{items: [{domain, inventory, prices[]}]}`; available-only, indicative prices |
+| Check | `POST /check-availability` with `{domains: [1..25], optimizeFor: SPEED or ACCURACY}`; per-item `available` or `error` |
+| Quote (later) | `POST /registration-quotes` returns a `quoteToken` locking price and agreements for 10 minutes |
+| Purchase (later) | `POST /registrations` with the `quoteToken`; 202, then poll `GET /registrations/{id}` |
+| DNS (later) | `/zones/{zone}/dns-records` (list, create, replace, delete) |
+| Hosting (later) | Not in this API; see 4.4 |
 
 Integration rules:
 
-- **Auth:** a Personal Access Token via `GDDY_PAT` (no browser OAuth on a server).
-- **Environment:** `ote` (test) by default; `prod` only when explicitly configured. The active environment is logged on every run and shown in the UI when not `prod`.
-- **Output:** parse the CLI's JSON output; use `--fields` and `--schema` to keep parsing stable. All calls have timeouts and are wrapped so errors become typed exceptions.
-- **Prerequisites on the account:** payment method, registrant contacts (`gddy domain contacts init`), and a hosting plan if using GoDaddy Hosting.
-- **Fallback:** if the CLI cannot be installed or a command is missing, `gddy_client` can be reimplemented against the GoDaddy REST API without changing callers.
+- **Auth:** a Personal Access Token sent as `Authorization: Bearer <PAT>`, read from `GDDY_PAT` in `backend/.env` by the settings layer. It is never logged or sent to the client.
+- **Environments:** read-only calls (suggest, check) and money-moving calls (quote, purchase) have **separate configurable base URLs**. The test environment is `https://api.ote-godaddy.com`; production is `https://api.godaddy.com`. The OTE environment returned an empty body for `/suggestions` when tried, so read-only calls may point at production (they cannot spend money) while purchase stays on OTE until a real run is intended. The active base URLs are logged at startup.
+- **Prices:** `price.value` is an integer in minor units (for USD, `919` is $9.19), converted with the currency's ISO-4217 decimals. The 1-year entry (`period == 1`) is used, with `renewalPrice` kept alongside it. Prices exclude taxes and fees and are indicative until a quote.
+- **Errors:** responses carry `{name, correlationId, message}` and an `X-Request-Id` header; the correlation id is logged. 401/403 (bad token), 429 (retry once with backoff), timeouts and malformed bodies become a typed `GddyError`. Per-domain check errors (`UNSUPPORTED_TLD`, `INVALID_DOMAIN`, `MISMATCH_FORMAT`) are treated as "not available".
+- **Availability policy:** suggestions are trusted as available. One `ACCURACY` check runs on the domain the user chooses. The authoritative check is the quote.
+- **Prerequisites on the account:** payment method, registrant contacts, and a hosting plan if using GoDaddy Hosting.
 
 ## 8. Data model
 
@@ -204,7 +208,7 @@ Minimal, stored in a single SQLite database:
 | --- | --- |
 | `Run` | `id`, `state`, `lang`, `idea`, `created_at`, `updated_at`, `error` |
 | `Brief` | `run_id`, JSON payload |
-| `DomainCandidate` | `run_id`, `domain`, `available`, `price`, `currency`, `chosen` |
+| `DomainCandidate` | `run_id`, `domain`, `price`, `renewal_price`, `currency`, `chosen` |
 | `Quote` | `run_id`, `domain`, `price`, `token`, `expires_at` |
 | `SiteContent` | `run_id`, JSON payload, `template_version` |
 | `Deployment` | `run_id`, `publisher`, `live_url`, `operation_ids`, `status` |
@@ -221,7 +225,8 @@ Quote tokens and PATs are secrets: tokens are never returned to the browser, and
 | Purchase unavailable for the account | Stop at the locked quote and show it; allow continuing with an already-owned domain |
 | Hosting upload or publish fails | Fall back to `StaticHostPublisher` if configured, otherwise surface the error with retry |
 | DNS propagation slow | Show "pending", poll, and keep the run in `DNS_CONNECTED` until the URL resolves |
-| Any `gddy` command times out | Typed error, run marked `FAILED` at that step, safe to retry the step if it is idempotent |
+| Chosen domain no longer available | Chosen domain re-check fails; the user is told and returned to the domain list. No Claude call is made |
+| Any GoDaddy request fails, times out or is rate limited | Retry once on 429; otherwise a typed error, run marked `FAILED` at that step, safe to retry the step if it is idempotent |
 
 Replay mode serves cached successful runs from JSON fixtures, for demos and offline work.
 
@@ -229,7 +234,7 @@ Replay mode serves cached successful runs from JSON fixtures, for demos and offl
 
 - Spending is gated by explicit approval and a server-side state check, not by UI alone.
 - Secrets (`ANTHROPIC_API_KEY`, `GDDY_PAT`) come from environment variables and are never logged or sent to the client. `.env` is gitignored.
-- `gddy_client` builds argument lists, never shell strings, and validates domains and TLDs against a strict pattern before use, to prevent command injection.
+- `gddy_client` sends JSON bodies and query parameters through the HTTP library (never string-built URLs), and validates domains against a strict pattern and the API's limits before use. Only the future hosting module may spawn processes, with argument lists.
 - Claude output is treated as untrusted: validated by schema, HTML-escaped by the template, never executed.
 - Basic rate limiting per client on run creation, to protect Claude spend and GoDaddy quota.
 - Spend limit set in the Anthropic Console as a backstop.
@@ -239,7 +244,7 @@ Replay mode serves cached successful runs from JSON fixtures, for demos and offl
 Where Shuru runs is intentionally undecided. Whatever is chosen must:
 
 - Run a Python (FastAPI) process and serve the built React app (or host it separately).
-- Install the `gddy` binary at build time (it installs to `~/.local/bin` and does not modify `PATH`), or use the REST API instead.
+- Allow outbound HTTPS to GoDaddy. The `gddy` binary is only needed once the CLI-based hosting publisher is built.
 - Allow outbound HTTPS to Anthropic and GoDaddy, and run subprocesses.
 - Provide persistent storage for the run store, or accept SQLite file loss on restart (replay fixtures are committed to the repo).
 - Support environment secrets and long-ish background tasks.
@@ -275,10 +280,10 @@ shuru/
 
 ## 13. Testing strategy
 
-- Unit tests for each service with a fake `gddy` runner and a fake Claude client.
+- Unit tests for each service with mocked GoDaddy HTTP responses (recorded from real calls) and a fake Claude client.
 - Contract tests for Claude output models using recorded fixtures.
 - State machine tests, including "purchase cannot run without approval" and "purchase cannot run twice".
-- An end-to-end run in the `ote` environment, plus one real run with a cheap domain before any demo.
+- An end-to-end run against the GoDaddy test environment, plus one real run with a cheap domain before any demo.
 
 ## 14. Open questions
 

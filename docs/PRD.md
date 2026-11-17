@@ -2,16 +2,16 @@
 
 | | |
 | --- | --- |
-| **Status** | Draft v0.2 |
+| **Status** | Draft v0.3 |
 | **Scope** | Hackathon MVP, solo build, 5 days, $100 in Claude credits |
-| **Stack** | Python (FastAPI), React (Vite), Anthropic Python SDK, `gddy` GoDaddy CLI |
+| **Stack** | Python (FastAPI), React (Vite), Anthropic Python SDK, GoDaddy v3 REST API (`gddy` CLI later for hosting only) |
 | **Source** | `LaunchPad Simplified Build Plan.md` |
 
 ## 1. Summary
 
 LaunchPad turns one sentence into a live website on a domain the user owns, in about 10 minutes. A first-time founder types an idea (e.g. "I make homemade achaar in Lucknow and want to sell online"), picks English or Hindi, chooses a domain, previews a generated one-page site, approves the purchase, and gets a live URL and a launch kit.
 
-It is a **guided 4-step wizard, not an agent**. Application code controls the sequence. Claude only generates structured JSON at fixed points. The `gddy` CLI handles domains, DNS and hosting.
+It is a **guided 4-step wizard, not an agent**. Application code controls the sequence. Claude only generates structured JSON at fixed points. The GoDaddy v3 REST API handles domain search, purchase and DNS; hosting uses the `gddy` CLI when it is built, because the v3 API has no hosting endpoints.
 
 **Problem:** first-time founders stall between "I have an idea" and "I have a URL". Too many decisions (name, domain, site, copy) and too many tools.
 
@@ -50,17 +50,20 @@ These replace the earlier open questions. Change any that are wrong.
 - **Hosting for Shuru itself:** Node.js or a VPS, to be chosen later. Details to be explored later.
 - **GoDaddy hosting plan:** the account has one, so GoDaddy Hosting is the default publishing target and the static-host fallback is only for failures.
 - **Approval** is the Approve click on step 4, with no separate authentication.
+- **GoDaddy access:** REST calls with the PAT as a Bearer token. Read-only calls (suggest, availability) and money-moving calls (quote, purchase) have separate base URLs. The test environment is `https://api.ote-godaddy.com`; its `/suggestions` returned an empty body when tried, so reads may use production while purchases stay on the test environment. Prices come back as integer minor units (`919` = $9.19).
+- **Availability policy:** suggestions are trusted as available; one accurate availability check runs on the chosen domain; the quote is the authoritative check.
+- **Cost transparency before generation:** after choosing a domain the user sees first-year price, renewal price and a "taxes and fees not included" note, and must confirm before Claude generates the site.
 - **Template** is neutral; no brand styling required.
 
-Still to verify on Day 1: the hosting plan supports Node.js, and the backend host can install `gddy` (see section 9).
+Still to verify on Day 1: the hosting plan supports Node.js, and, before the hosting step, that the backend host can install `gddy` (see section 9).
 
 ## 4. User flow
 
 | # | Step | User does | System does |
 | --- | --- | --- | --- |
 | 1 | Describe idea | Types a sentence, picks language | Claude call 1: brief and name ideas |
-| 2 | Pick domain | Chooses from available domains with prices | `gddy` suggest and availability |
-| 3 | Preview site | Reads site, toggles language, may regenerate | Claude call 2: site JSON rendered in template |
+| 2 | Pick domain | Chooses a suggested domain, reviews its cost, confirms | Suggest via REST, accurate re-check of the chosen domain, then (after confirmation) Claude call 2 |
+| 3 | Preview site | Reads site, toggles language, may regenerate | Site JSON rendered in template |
 | 4 | Confirm and launch | Reviews domain, price, preview; clicks **Approve** | Quote, purchase, package, publish, DNS, then Claude call 3: launch kit |
 
 ## 5. Functional requirements
@@ -72,13 +75,15 @@ Still to verify on Day 1: the hosting plan supports Node.js, and the backend hos
 - The brief is validated with Pydantic. On failure, retry once, then show a "Try again" error.
 - The brief is shown to the user before the domain step.
 
-### Step 2: Domains
+### Step 2: Domains and cost review
 
-- Run `gddy domain suggest` (`--tlds com,net,io --limit 5`) using the brief's names. Merge and de-duplicate.
-- Check each candidate with `gddy domain available`, in parallel with timeouts. Use `--check-type full` only on the final pick.
-- Show only available domains with prices. If none, offer "Try different names" with the user's own keyword.
-- No Claude call in this step.
-- All `gddy` calls go through one wrapper module that parses JSON.
+- Call `GET /suggestions` (`tlds=com,net,io`, small `pageSize`) for the first few brief names. Merge and de-duplicate. Suggestions are available-only and carry indicative 1-year and renewal prices.
+- Show the suggestions with their 1-year price. If none, offer "Try different names" with the user's own keyword; a typed keyword goes through suggest the same way.
+- When the user chooses a domain, run one `POST /check-availability` with accurate checking (`ACCURACY`). If the domain is no longer available, tell the user and return to the list; no Claude call is made.
+- **Cost review.** Show the domain, first-year price, renewal price and the note "Prices exclude taxes and fees and may change until you purchase". Two actions: **Confirm and build my site** and **Pick a different domain**.
+- Claude call 2 (the site) runs only after Confirm. Nothing is purchased in this step.
+- Prices are converted from minor units using the currency's decimals.
+- All GoDaddy calls go through one client module.
 
 ### Step 3: Site and preview
 
@@ -92,12 +97,12 @@ Still to verify on Day 1: the hosting plan supports Node.js, and the backend hos
 The only step that spends money or changes external state. In order:
 
 1. **Approval gate.** Show domain, price, hosting and what will happen. Nothing runs until Approve.
-2. **Fresh quote.** `gddy domain quote` right before purchase. Re-quote if the token is older than about 8 minutes or reported expired.
-3. **Agreements and contacts.** Show `gddy domain agreements`, require acceptance, fill registrant contacts from the operator's template.
-4. **Purchase.** `gddy domain purchase --quote-token <token> --agree --confirm`.
+2. **Fresh quote.** `POST /registration-quotes` right before purchase. Re-quote if the token is older than about 8 minutes or reported expired.
+3. **Agreements and contacts.** Show the agreements returned with the quote, require acceptance, fill registrant contacts from the operator's template.
+4. **Purchase.** `POST /registrations` with the `quoteToken` and accepted agreements; it returns 202, so poll the registration until `COMPLETED` or `FAILED`.
 5. **Package.** Wrap the HTML in a Node.js app and zip it (section 7).
-6. **Host.** `gddy hosting app create`, `source upload`, `subscription attach`, `deployment publish`, polling each until done or timeout.
-7. **DNS.** `gddy dns add` or `set`, previewed with `--dry-run` first. Do not wait for full propagation; show a note if the URL is not live yet.
+6. **Host.** Using the `gddy` CLI (not in the v3 API): `gddy hosting app create`, `source upload`, `subscription attach`, `deployment publish`, polling each until done or timeout.
+7. **DNS.** Create or replace records via `/zones/{zone}/dns-records`, listing existing records first. Do not wait for full propagation; show a note if the URL is not live yet.
 8. **Result.** Show the live URL and the launch kit.
 
 ### Launch kit
@@ -157,11 +162,11 @@ React wizard (Vite): idea, domain, preview, confirm
    |
 FastAPI backend
    |-- Claude: brief (Haiku)
-   |-- gddy: domain suggest / available
+   |-- GoDaddy REST: suggest / check availability
    |-- Claude: site JSON (Sonnet) -> HTML template
-   |-- gddy: quote -> purchase           (only after Approve)
+   |-- GoDaddy REST: quote -> purchase   (only after Approve)
    |-- package Node.js app -> gddy hosting upload / publish
-   |-- gddy: DNS records
+   |-- GoDaddy REST: DNS records
    |-- Claude: launch kit (Haiku)
    |-- SQLite: runs and replay fixtures
 ```
@@ -171,10 +176,10 @@ FastAPI backend
 | Frontend | React with Vite |
 | Backend | Python with FastAPI |
 | Claude | Anthropic Python SDK with Pydantic validation |
-| GoDaddy | `gddy` CLI (REST API as fallback) |
+| GoDaddy | v3 REST API (`httpx`); `gddy` CLI only for hosting, later |
 | Storage | SQLite |
 | Dev | GitHub Codespaces with Claude Code |
-| App hosting | Render or Railway; must be able to install `gddy` at build time |
+| App hosting | Render or Railway; must be able to install `gddy` at build time once the hosting step is built |
 
 Suggested backend modules: `api/`, `claude/`, `godaddy/`, `site/`, `runs/`, `replay/`.
 
@@ -191,16 +196,16 @@ Suggested backend modules: `api/`, `claude/`, `godaddy/`, `site/`, `runs/`, `rep
 | DNS not propagated | Show live URL with a propagation note |
 | Network failure in demo | Switch to replay mode |
 
-Users see plain-language messages. Raw CLI output goes to logs only.
+Users see plain-language messages. Raw API and CLI output goes to logs only.
 
 ## 11. Risks and fallbacks
 
 | Risk | Fallback |
 | --- | --- |
 | Purchase API unavailable for the account | Stop at the locked quote; use a pre-registered domain for DNS and publish |
-| Tests buy real domains | Use `ote`, `--dry-run`, one cheap rehearsal domain |
+| Tests buy real domains | Use the test environment, list DNS records before writing, one cheap rehearsal domain |
 | No hosting plan or Node.js upload fails | Deploy to a free static host (Cloudflare Pages, Netlify, Vercel) and point GoDaddy DNS at it |
-| `gddy` cannot install on the backend host | Use the GoDaddy REST API, or run purchase and publish from the Codespace |
+| `gddy` cannot install on the backend host (hosting step only) | Use the static-host fallback, or run publish from the Codespace |
 | Slow DNS propagation | Pre-warm a domain already owned; show the rehearsal URL |
 | Credits run low | Replay fixtures, Haiku everywhere except the site call |
 | Scope creep | Cut launch kit first, then Hindi toggle. Never cut the domain-to-live-URL path |
@@ -214,8 +219,8 @@ Users see plain-language messages. Raw CLI output goes to logs only.
 
 | Day | Focus | Exit criteria |
 | --- | --- | --- |
-| 1 | Install `gddy`, payment method, PAT, practise on `ote`; FastAPI and React skeletons; Claude call 1 | Brief shows in UI; `gddy` works in `ote`; hosting plan and host install verified |
-| 2 | `gddy` domain wrapper, domain picker, quote and purchase behind Approve | Approve gate tested; purchase works in `ote` or on one rehearsal domain |
+| 1 | Payment method, PAT, practise against the test environment; FastAPI and React skeletons; Claude call 1 | Brief shows in UI; GoDaddy REST calls work; hosting plan and host install verified |
+| 2 | GoDaddy REST client, domain picker, cost review, quote and purchase behind Approve | Approve gate tested; purchase works in `ote` or on one rehearsal domain |
 | 3 | Template, Claude call 2, preview, language toggle, packaging | Zip passes section 7 checks; preview renders from real generation |
 | 4 | Upload, attach, publish with polling; DNS; confirm screen; launch kit | Live URL opens from a real run; run saved; replay works |
 | 5 | Error states, backup video, README, slide, 3 to 4 rehearsals | Rehearsals take about 10 minutes |
@@ -243,9 +248,9 @@ The live registration uses a domain bought during rehearsal. If it fails, switch
 
 ## 15. Dependencies and glossary
 
-**Dependencies:** GoDaddy account with payment method and PAT; `gddy` on the Codespace and backend host; Anthropic API key with a spend limit; Node.js on the hosting target; GoDaddy's "Connect your domain" hosting guide (read on Day 1).
+**Dependencies:** GoDaddy account with payment method and PAT; `gddy` on the backend host (hosting step only); Anthropic API key with a spend limit; Node.js on the hosting target; GoDaddy's "Connect your domain" hosting guide (read on Day 1).
 
-**Glossary:** `gddy` is GoDaddy's CLI. `ote` is its test environment (`prod` is real). A PAT is a Personal Access Token used instead of browser OAuth. A quote token is a roughly 10-minute price lock. Replay mode shows a saved run with no external calls.
+**Glossary:** `gddy` is GoDaddy's CLI, used here for hosting only. `ote` is the GoDaddy test environment (`prod` is real). A PAT is a Personal Access Token used instead of browser OAuth. A quote token is a roughly 10-minute price lock. Replay mode shows a saved run with no external calls.
 
 ## 16. Sources
 
