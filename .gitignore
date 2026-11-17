@@ -9,3 +9,5 @@ data/
 *.sqlite
 *.sqlite3
 .DS_Store
+backend/app/.env
+backend/data
