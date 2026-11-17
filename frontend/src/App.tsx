@@ -6,6 +6,7 @@ import { DomainStep } from "./components/DomainStep";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { IdeaStep } from "./components/IdeaStep";
 import { Loading } from "./components/Loading";
+import { Logo } from "./components/Logo";
 import { PreviewStep } from "./components/PreviewStep";
 import { ReviewStep } from "./components/ReviewStep";
 import { Stepper } from "./components/Stepper";
@@ -125,7 +126,7 @@ export function App() {
     <div className="page">
       <header className="site-header">
         <button type="button" className="logo" title="Start a new site" onClick={requestStartOver}>
-          Shuru
+          <Logo />
         </button>
         <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
       </header>

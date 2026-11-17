@@ -79,7 +79,8 @@ Still to verify on Day 1: the hosting plan supports Node.js, and, before the hos
 ### Step 2: Domains and cost review
 
 - Call `GET /suggestions` (`tlds=com,net,io`, small `pageSize`) for the first few brief names. Merge and de-duplicate. Suggestions are available-only and carry indicative 1-year and renewal prices.
-- Show the suggestions with their 1-year price. If none, offer "Try different names" with the user's own keyword; a typed keyword goes through suggest the same way.
+- Show the suggestions with their 1-year price. The default search covers only the first few brief names, so every name idea is also shown as a tappable chip: tapping one searches for it, and tapping it again returns to the default list. A typed keyword ("Looking for something else?") goes through suggest the same way. If nothing is found, the user is asked to try a different word.
+- Keep the business reminder (tagline, name ideas, folded audience and tone) visible at the top of the step so the user does not have to go back to the Idea screen.
 - When the user chooses a domain, run one `POST /check-availability` with accurate checking (`ACCURACY`). If the domain is no longer available, tell the user and return to the list; no Claude call is made.
 - **Cost review.** Show the domain, first-year price, renewal price and the note "Prices exclude taxes and fees and may change until you purchase". Two actions: **Confirm and build my site** and **Pick a different domain**.
 - Claude call 2 (the site) runs only after Confirm. Nothing is purchased in this step.
@@ -118,9 +119,10 @@ The only step that spends money or changes external state. In order:
 - **Resume.** The run and step are in the URL (`#/run/{id}/{step}`). Refresh, a pasted link and the browser Back button reopen the right step.
 - **Locked after generation.** Once the site is generated, the domain cannot be changed. Domain and Review are locked; Idea (read-only summary) and Preview stay open. Preview offers **Start over** for a new site.
 - **Idea screen:** one-line intro, a 0 to 500 character counter, clickable example ideas, an English/Hindi switch, and a friendly summary (tagline, audience, tone, name-idea chips).
-- **Domain screen:** a "Looking for something else?" search at the top, domain cards with first-year and renewal price, loading skeletons, a "Try again" button on errors, and the note that prices exclude taxes and fees.
+- **Domain screen:** a compact business reminder at the top (tagline, the name ideas as tappable chips, and audience and tone folded away under "More about your business"). Tapping a name idea searches for it; tapping it again returns to the default suggestions. Then a "Looking for something else?" search, domain cards with first-year and renewal price, loading skeletons, a "Try again" button on errors, and the note that prices exclude taxes and fees.
 - **Review screen:** the price shown prominently, the "Nothing is purchased yet" note, a primary Confirm button and a secondary "Pick a different domain" button, and a progress panel while the site is written (about 20 seconds).
 - **Preview screen:** a language switch, a preview that fits the window, "Regenerate (N of 3 left)", and a "What's next" panel (buying the domain is shown as coming soon).
+- **Brand and colour.** The logo is a green tile with a "start" arrow, the wordmark "Shuru" with a turmeric dot, and "शुरू" (Hindi for "start"); the favicon uses the same mark. The palette is green plus one warm turmeric accent (`#E9A23B`) for small highlights such as the current-step ring and the tagline bar. Turmeric is never used for text on white (2.2:1 contrast); secondary text is at least 8:1 and placeholders about 5.8:1.
 - **Accessibility:** focus moves to the new screen's heading on every step change, loading and errors are announced to screen readers, the page title follows the step, and Hindi text carries `lang="hi"`.
 - Out of scope for now: dark mode, a "test environment" badge, and "continue your last site" from browser storage.
 

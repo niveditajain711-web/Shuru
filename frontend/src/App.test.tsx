@@ -121,6 +121,42 @@ describe("wizard flow", () => {
   });
 });
 
+describe("domain step business summary", () => {
+  async function openDomainStep(user: ReturnType<typeof userEvent.setup>) {
+    render(<App />);
+    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.click(screen.getByRole("button", { name: "Create my business summary" }));
+    await user.click(await screen.findByRole("button", { name: "Find domains" }));
+    await screen.findByRole("heading", { name: "Pick your domain" });
+  }
+
+  it("shows the tagline and name ideas, with audience and tone folded away", async () => {
+    const user = userEvent.setup();
+    await openDomainStep(user);
+
+    const summary = screen.getByRole("complementary", { name: "Your business" });
+    expect(within(summary).getByText("Pickles like home")).toBeTruthy();
+    expect(within(summary).getByRole("button", { name: "achaar" })).toBeTruthy();
+    expect(summary.querySelector("details")?.open).toBe(false);
+  });
+
+  it("searches for a name idea when it is tapped, and goes back to the default when tapped again", async () => {
+    const user = userEvent.setup();
+    await openDomainStep(user);
+    const chip = screen.getByRole("button", { name: "achaar" });
+
+    await user.click(chip);
+    await waitFor(() => expect(calls.some((call) => call.includes("/domains?keyword=achaar"))).toBe(true));
+    await waitFor(() => expect(chip.getAttribute("aria-pressed")).toBe("true"));
+    expect((screen.getByLabelText("Looking for something else?") as HTMLInputElement).value).toBe("achaar");
+
+    const before = calls.length;
+    await user.click(chip);
+    await waitFor(() => expect(chip.getAttribute("aria-pressed")).toBe("false"));
+    expect(calls.slice(before).some((call) => call.includes("keyword"))).toBe(false);
+  });
+});
+
 describe("stepper", () => {
   it("lets the user go back to a finished step and marks locked steps after generation", async () => {
     const user = userEvent.setup();

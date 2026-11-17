@@ -1,11 +1,15 @@
 /* --- Design tokens --- */
 :root {
   --ink: #1f2933;
-  --muted: #52606d;
+  --muted: #3e4c59;
+  --placeholder: #5b6773;
   --accent: #1d6f5f;
   --accent-strong: #15564a;
   --accent-soft: #e3f1ee;
   --accent-ink: #ffffff;
+  /* One warm accent, used sparingly for highlights. Never as text on white (2.2:1); use fills with dark text. */
+  --turmeric: #e9a23b;
+  --turmeric-soft: #fdf1d9;
   --border: #d5dde0;
   --bg: #f4f7f6;
   --surface: #ffffff;
@@ -57,11 +61,11 @@ body {
 }
 
 .logo {
+  display: inline-flex;
+  align-items: center;
   align-self: flex-start;
-  padding: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
   color: var(--accent);
   background: none;
   border-radius: var(--radius-small);
@@ -69,7 +73,34 @@ body {
 
 .logo:hover:not(:disabled) {
   background: none;
-  text-decoration: underline;
+}
+
+.logo:hover:not(:disabled) .logo-mark {
+  color: var(--accent-strong);
+}
+
+.logo-mark {
+  flex: none;
+}
+
+.logo-word {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.logo-dot {
+  color: var(--turmeric);
+}
+
+.logo-hindi {
+  padding-left: var(--space-2);
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--muted);
+  border-left: 1px solid var(--border);
 }
 
 /* --- Stepper --- */
@@ -154,7 +185,9 @@ button.step-button:hover:not(:disabled) {
   color: var(--accent-ink);
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--turmeric);
 }
 
 .step.current .step-button,
@@ -265,9 +298,44 @@ p {
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-large);
   font-weight: 600;
-  background: var(--accent-soft);
-  border-left: 4px solid var(--accent);
+  background: var(--turmeric-soft);
+  border-left: 4px solid var(--turmeric);
   border-radius: var(--radius-small);
+}
+
+.business-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--turmeric-soft);
+  border-left: 4px solid var(--turmeric);
+  border-radius: var(--radius-small);
+}
+
+.business-tagline {
+  font-weight: 600;
+}
+
+.business-summary .chip {
+  background: var(--surface);
+}
+
+.business-summary button.chip[aria-pressed="true"] {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.business-summary details summary {
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.business-summary .facts {
+  margin-top: var(--space-3);
 }
 
 .facts {
@@ -311,6 +379,11 @@ input {
 
 textarea {
   resize: vertical;
+}
+
+::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
 }
 
 .keyword {

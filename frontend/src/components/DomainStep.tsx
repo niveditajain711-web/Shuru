@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { Run } from "../api/types";
 import { formatPrice } from "../format";
 import { useAction } from "../hooks/useAction";
+import { BusinessSummary } from "./BusinessSummary";
 import { ErrorMessage } from "./ErrorMessage";
 import { Loading } from "./Loading";
 
@@ -25,6 +26,15 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
   const needsSearch = run.state === "briefed";
   const showSkeleton = searching || (needsSearch && !searchError);
   const domains = run.domains;
+
+  // Tapping a name idea searches for it; tapping it again goes back to the default suggestions.
+  const activeName = run.brief.name_ideas.find((name) => name === lastKeyword);
+
+  async function handlePickName(name: string) {
+    const next = activeName === name ? undefined : name;
+    setKeyword(next ?? "");
+    await runSearch(next);
+  }
 
   async function runSearch(keywordToSearch?: string) {
     setLastKeyword(keywordToSearch);
@@ -57,6 +67,13 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
       <p className="lead">
         These domains are available to register. Prices are for the first year and exclude taxes and fees.
       </p>
+
+      <BusinessSummary
+        run={run}
+        activeName={activeName}
+        onPickName={(name) => void handlePickName(name)}
+        disabled={searching || choosing}
+      />
 
       <form onSubmit={handleKeywordSubmit} className="keyword">
         <label htmlFor="keyword">Looking for something else?</label>
@@ -105,6 +122,7 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
         <fieldset disabled={choosing}>
           <legend>
             {domains.length} available {domains.length === 1 ? "domain" : "domains"}
+            {lastKeyword && <> for “{lastKeyword}”</>}
           </legend>
           {domains.map((domain) => (
             <label key={domain.name} className="domain-card">
