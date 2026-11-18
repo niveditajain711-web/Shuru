@@ -32,7 +32,7 @@ It is a **guided 4-step wizard, not an agent**. Application code controls the se
 
 - Autonomous agent behaviour.
 - Renewals, forwarding, registry lock, contact updates.
-- Site editing, CMS, e-commerce, email hosting, logo or SEO tools.
+- Site editing, CMS, e-commerce, email hosting for users' sites, logo or SEO tools. (Shuru itself has one GoDaddy Titan mailbox that receives its own contact form; see section 3.)
 - User accounts, end-user billing, production auth.
 
 ## 3. Decisions and assumptions
@@ -47,7 +47,8 @@ These replace the earlier open questions. Change any that are wrong.
 - **Agreements:** ICANN agreement text is shown in the UI and must be accepted.
 - **Storage:** **SQLite** (decided; no JSON-file store). If the host disk is ephemeral, replay fixtures are committed to the repo.
 - **Progress updates:** **polling** (decided). The frontend calls `GET /runs/{id}` about every 2 seconds until the run is `live` or `failed`. SSE is a possible later upgrade, not part of this build.
-- **Hosting for Shuru itself:** Node.js or a VPS, to be chosen later. Details to be explored later.
+- **Hosting for Shuru itself:** a **GoDaddy VPS (Gen4, Linux, 4 vCPU) running Docker**, already bought. Steps: generate an SSH key, install it on the server, connect with it, package the app with Docker and run it there. Dockerfile and compose setup are still to be written (architecture section 11).
+- **Contact form and mailbox:** Shuru has one GoDaddy Titan mailbox (`nivedita.jain@shuru.biz`, Pro Light plan, created with the `gddy` CLI). The wizard page has a "Contact us" form (name, email, message) whose messages the backend emails to that mailbox over SMTP. The SMTP host is GoDaddy's `smtpout.secureserver.net` (port 465, or 587 with STARTTLS), not `smtp.titan.email`, and the username is the full email address. The mailbox password is **only** in the environment (`SHURU_SMTP_PASSWORD`: gitignored `backend/.env` locally, a secret or env file on the VPS), never in code, the repo, the image or the browser. Sites Shuru generates do not get contact forms yet (their `contact` section is display text only).
 - **GoDaddy hosting plan:** the account has one, so GoDaddy Hosting is the default publishing target and the static-host fallback is only for failures.
 - **Approval** is the Approve click on step 4, with no separate authentication.
 - **GoDaddy access:** REST calls with the PAT as a Bearer token. Read-only calls (suggest, availability) and money-moving calls (quote, purchase) have separate base URLs. The test environment is `https://api.ote-godaddy.com`; its `/suggestions` returned an empty body when tried, so reads may use production while purchases stay on the test environment. Prices come back as integer minor units (`919` = $9.19).
@@ -56,7 +57,7 @@ These replace the earlier open questions. Change any that are wrong.
 - **Template** is neutral; no brand styling required.
 - **UI decisions:** the logo starts a fresh run (with confirmation); Preview is locked once generated, with "Start over"; navigation is stored in the URL hash.
 
-Still to verify on Day 1: the hosting plan supports Node.js, and, before the hosting step, that the backend host can install `gddy` (see section 9).
+Still to verify: before the hosting step, that the backend host can install `gddy` (see section 9).
 
 ## 4. User flow
 
@@ -112,6 +113,13 @@ The only step that spends money or changes external state. In order:
 - After launch, Claude (Haiku) returns 5 social posts, a welcome email (subject and body) and a 30-day checklist by week.
 - Copyable in the UI. First feature cut if time runs short.
 
+### Contact form
+
+- A "Contact us" card sits below every wizard screen. Fields: name (1 to 100 characters), email, message (1 to 5000 characters). Send is disabled until all three are filled.
+- `POST /api/contact` validates the input, then sends one email from the Shuru mailbox to the Shuru mailbox with the visitor's address in `Reply-To`. The From address is never the visitor's, because the SMTP server would reject or spam-flag it.
+- Abuse protection: a hidden honeypot field (filled means a bot; the server answers success and sends nothing), a per-client limit of 5 messages per hour (429 with a plain message), and rejection of line breaks in name and email (header injection).
+- On success the user sees a thank-you. On failure they see a plain message and keep what they typed. If SMTP is not configured the endpoint returns 503 and the log says which variables are missing.
+
 ### Navigation and screen design
 
 - **Stepper.** A header stepper shows Idea, Domain, Review and Preview as done, current or upcoming. Finished steps that are still open are clickable. Locked or not-yet-reached steps are disabled and say why ("Choose a domain first", "Locked once your site is written. Start over to change it"). On phones it shows "Step N of 4" and the current label only.
@@ -163,7 +171,7 @@ Packaging has its own tests and must not call GoDaddy.
 
 - **Safety (hard invariant):** no purchase, hosting write or DNS write runs without Approve for that run. Covered by tests.
 - **Test money:** use the `ote` environment where possible and `--dry-run` for DNS. Buy only one cheap domain for rehearsal.
-- **Secrets:** the GoDaddy PAT and Anthropic key come from environment variables, never reach the frontend, logs or git.
+- **Secrets:** the GoDaddy PAT, Anthropic key and the mailbox SMTP password come from environment variables, never reach the frontend, logs, git or the Docker image.
 - **Timeouts:** every external call has one; polling has an overall deadline.
 - **Recovery:** each run has a state (`brief`, `domain_selected`, `site_ready`, `approved`, `purchased`, `hosted`, `dns_set`, `live`, `failed`). If a step fails after purchase, the run keeps its state so the user can resume without buying twice. A purchase is never retried silently.
 - **Logging:** one line per step with command, exit code, token counts and timestamps.
@@ -211,6 +219,7 @@ Suggested backend modules: `api/`, `claude/`, `godaddy/`, `site/`, `runs/`, `rep
 | Publish times out | Poll to deadline, show status, offer retry |
 | DNS not propagated | Show live URL with a propagation note |
 | Network failure in demo | Switch to replay mode |
+| Contact mail cannot be sent (SMTP login rejected, timeout) | "We couldn't send your message"; the log has the server reply. First check the host is `smtpout.secureserver.net` and the username is the full address |
 
 Users see plain-language messages. Raw API and CLI output goes to logs only.
 
