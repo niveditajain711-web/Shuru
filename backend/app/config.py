@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Base URL for the read-only calls (suggest, availability). The GoDaddy test environment is the
     # default. If it returns no suggestions, point this at production (`https://api.godaddy.com/v3/domains`):
     # these calls cannot spend money. Quote and purchase will get their own setting when they are built.
-    gddy_read_base_url: str = "https://api.ote-godaddy.com/v3/domains"
+    gddy_read_base_url: str = "https://api.godaddy.com/v3/domains"
     gddy_timeout_seconds: float = 15.0
 
     regeneration_cap: int = 3
