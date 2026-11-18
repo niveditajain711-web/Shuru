@@ -1,4 +1,4 @@
-import type { Lang, Run } from "./types";
+import type { ContactMessage, Lang, Run } from "./types";
 
 const FALLBACK_MESSAGE = "Something went wrong. Please try again.";
 const INVALID_INPUT_MESSAGE = "Please check what you entered and try again.";
@@ -61,6 +61,8 @@ export const api = {
     post<Run>(`/runs/${runId}/generate`, { domain, price }),
 
   regenerateSite: (runId: string) => post<Run>(`/runs/${runId}/regenerate`),
+
+  sendContact: (message: ContactMessage) => post<{ ok: boolean }>("/contact", message),
 
   previewUrl: (runId: string, lang: Lang, version: number) =>
     `/api/runs/${runId}/preview?lang=${lang}&v=${version}`,

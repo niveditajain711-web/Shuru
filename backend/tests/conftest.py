@@ -6,6 +6,7 @@ from app.errors import ClaudeError, DomainTakenError, GddyError
 from app.main import create_app
 from app.models import Brief, DomainOffer, Lang, SiteContent
 from app.orchestrator import Orchestrator
+from app.rate_limit import RateLimiter
 from app.services.site_service import SiteService
 from app.store import RunStore
 
@@ -90,6 +91,22 @@ def orchestrator(tmp_path, claude, domains) -> Orchestrator:
     )
 
 
+class FakeMailer:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+        self.error: Exception | None = None
+
+    def send_contact(self, name: str, email: str, message: str) -> None:
+        if self.error:
+            raise self.error
+        self.sent.append((name, email, message))
+
+
 @pytest.fixture
-def client(orchestrator) -> TestClient:
-    return TestClient(create_app(orchestrator), raise_server_exceptions=False)
+def mailer() -> FakeMailer:
+    return FakeMailer()
+
+
+@pytest.fixture
+def client(orchestrator, mailer) -> TestClient:
+    return TestClient(create_app(orchestrator, mailer, RateLimiter(3, 3600)), raise_server_exceptions=False)

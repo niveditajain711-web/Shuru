@@ -3,14 +3,36 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 
-from app.models import DOMAIN_LABEL_PATTERN, ChooseDomainRequest, CreateRunRequest, GenerateSiteRequest, Lang, Run
+from app.errors import RateLimitedError
+from app.models import (
+    DOMAIN_LABEL_PATTERN,
+    ChooseDomainRequest,
+    ContactRequest,
+    ContactResponse,
+    CreateRunRequest,
+    GenerateSiteRequest,
+    Lang,
+    Run,
+)
 from app.orchestrator import Orchestrator
+from app.rate_limit import RateLimiter
+from app.services.mail_service import MailService
 
 
 def get_orchestrator(request: Request) -> Orchestrator:
     return request.app.state.orchestrator
 
 
+def get_mailer(request: Request) -> MailService:
+    return request.app.state.mailer
+
+
+def get_contact_limiter(request: Request) -> RateLimiter:
+    return request.app.state.contact_limiter
+
+
+MailerDep = Annotated[MailService, Depends(get_mailer)]
+LimiterDep = Annotated[RateLimiter, Depends(get_contact_limiter)]
 OrchestratorDep = Annotated[Orchestrator, Depends(get_orchestrator)]
 
 router = APIRouter(prefix="/api")
@@ -53,3 +75,14 @@ def regenerate_site(run_id: str, orchestrator: OrchestratorDep) -> Run:
 @router.get("/runs/{run_id}/preview", response_class=HTMLResponse)
 def preview(run_id: str, orchestrator: OrchestratorDep, lang: Lang = Lang.EN) -> str:
     return orchestrator.render_preview(run_id, lang)
+
+
+@router.post("/contact", response_model=ContactResponse)
+def send_contact(body: ContactRequest, request: Request, mailer: MailerDep, limiter: LimiterDep) -> ContactResponse:
+    if body.website:
+        # Honeypot filled in: a bot. Pretend it worked, send nothing.
+        return ContactResponse()
+    if not limiter.allow(request.client.host if request.client else "unknown"):
+        raise RateLimitedError()
+    mailer.send_contact(body.name, body.email, body.message)
+    return ContactResponse()

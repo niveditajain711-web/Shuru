@@ -21,7 +21,7 @@ Shuru is a guided wizard, not an autonomous agent. Our code runs a fixed sequenc
 **Non-goals (for now)**
 
 - Autonomous tool-calling or agent loops.
-- Payments, email, renewals, domain forwarding, registry lock, contact updates.
+- Payments, email hosting for users' sites, renewals, domain forwarding, registry lock, contact updates.
 - Multi-page sites or user-editable site builders.
 - Multi-tenant accounts and auth (a single operator GoDaddy account is assumed).
 
@@ -90,6 +90,7 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 - Loading states (spinner and skeletons) announce themselves to screen readers; each new screen moves focus to its heading and updates the page title.
 - Review-cost screen (after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
 - Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 8.
+- **Contact form** (`ContactForm`) in the page footer, below every screen. It posts to `POST /contact`, shows a thank-you or a plain error, and keeps the typed text on failure. It includes a hidden honeypot field. No mail credentials exist in the browser.
 - Launch screen polls `GET /runs/{id}` every 2 seconds (see 5.1) and shows the live URL and launch kit.
 
 ### 4.2 Backend (Python + FastAPI)
@@ -102,6 +103,7 @@ Thin HTTP layer over a set of services. One endpoint per step, all keyed by `run
 | `gddy_client` | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses, converts minor-unit prices, maps errors to typed exceptions. Only module that calls GoDaddy. |
 | `domain_service` | Suggest, availability, quote, purchase. Owns quote-token expiry handling. |
 | `site_service` | Renders content JSON through the fixed template to static HTML. |
+| `mail_service` | Sends contact-form messages over SMTP (`smtplib`) to the Shuru mailbox. Implicit TLS on port 465, STARTTLS otherwise. Only module that talks SMTP; takes credentials from settings only. |
 | `packager` | Wraps the HTML in a minimal Node.js app and zips it to the publishing target's requirements. |
 | `publisher` | Interface for publishing a built site (see 4.4). |
 | `dns_service` | Adds the DNS records that point the domain at the published site. |
@@ -179,6 +181,7 @@ Progress is delivered by **polling**, not SSE. The browser calls `GET /runs/{id}
 | `POST /runs/{id}/generate` | User confirmed the cost; triggers Claude call #2; returns site content |
 | `GET /runs/{id}/preview` | Rendered HTML (or content JSON) for the preview |
 | `POST /runs/{id}/approve` | Money gate; starts purchase, publish, DNS, launch kit as a background job |
+| `POST /contact` | Contact form: `{name, email, message, website}` (`website` is a honeypot). Emails the Shuru mailbox; returns `{ok: true}`. 422 invalid, 429 rate limited, 502 SMTP failed, 503 not configured |
 | `GET /runs/{id}` | Status, current step, errors, and final results (URL, kit) |
 | `POST /runs/{id}/replay` | Replay a cached run from fixtures (demo and offline mode) |
 
@@ -239,15 +242,22 @@ Replay mode serves cached successful runs from JSON fixtures, for demos and offl
 ## 10. Security and safety
 
 - Spending is gated by explicit approval and a server-side state check, not by UI alone.
-- Secrets (`ANTHROPIC_API_KEY`, `GDDY_PAT`) come from environment variables and are never logged or sent to the client. `.env` is gitignored.
+- Secrets (`ANTHROPIC_API_KEY`, `GDDY_PAT`, `SHURU_SMTP_PASSWORD`) come from environment variables and are never logged or sent to the client. `.env` is gitignored.
 - `gddy_client` sends JSON bodies and query parameters through the HTTP library (never string-built URLs), and validates domains against a strict pattern and the API's limits before use. Only the future hosting module may spawn processes, with argument lists.
 - Claude output is treated as untrusted: validated by schema, HTML-escaped by the template, never executed.
+- **Contact form:** the SMTP password is read from settings (`SecretStr`) and never logged or sent anywhere. Mail is built with `EmailMessage`, which rejects line breaks in headers, and name and email are also pattern-checked. From is always the mailbox, the visitor goes in `Reply-To`. Abuse controls: honeypot field, in-memory per-client limit (5 per hour, single process). Behind a reverse proxy the limiter sees the proxy's address unless the proxy forwards the client IP (`uvicorn --proxy-headers --forwarded-allow-ips`), to be set when the VPS proxy is configured.
 - Basic rate limiting per client on run creation, to protect Claude spend and GoDaddy quota.
 - Spend limit set in the Anthropic Console as a backstop.
 
-## 11. Deployment and hosting (deferred)
+## 11. Deployment and hosting
 
-Where Shuru runs is intentionally undecided. Whatever is chosen must:
+**Decided:** Shuru runs on the **GoDaddy Gen4 Linux VPS (4 vCPU) with Docker**. Setup: generate an SSH key, install it on the server, connect with it, package the app with Docker and run it. Not built yet: Dockerfile(s), compose file, reverse proxy with TLS.
+
+**Secrets on the VPS:** `ANTHROPIC_API_KEY`, `GDDY_PAT` and `SHURU_SMTP_*` are passed at run time (`docker run --env-file /etc/shuru/backend.env`, file readable only by the deploy user, or compose secrets). They are not baked into the image, not copied by `COPY`, and not committed; keep `.env` in `.dockerignore` as well as `.gitignore`.
+
+**Contact mail:** the container needs outbound access to `smtpout.secureserver.net` on port 465 (or 587). Some VPS providers block outbound SMTP ports; if sending fails with a connection timeout, check the firewall first.
+
+The host must also:
 
 - Run a Python (FastAPI) process and serve the built React app (or host it separately).
 - Allow outbound HTTPS to GoDaddy. The `gddy` binary is only needed once the CLI-based hosting publisher is built.
@@ -255,7 +265,7 @@ Where Shuru runs is intentionally undecided. Whatever is chosen must:
 - Provide persistent storage for the run store, or accept SQLite file loss on restart (replay fixtures are committed to the repo).
 - Support environment secrets and long-ish background tasks.
 
-Local development uses GitHub Codespaces, a Vite dev server and `uvicorn`, with the `ote` environment and fixtures. Revisit this section once hosting options are evaluated.
+Local development uses GitHub Codespaces, a Vite dev server and `uvicorn`, with the `ote` environment and fixtures.
 
 ## 12. Proposed repository layout
 
@@ -267,11 +277,13 @@ shuru/
       main.py            # FastAPI app and routes
       orchestrator.py    # state machine
       models.py          # Pydantic models (API, Claude output, DB)
+      rate_limit.py      # in-memory per-client limiter (contact form)
       services/
         claude_service.py
         gddy_client.py
         domain_service.py
         site_service.py
+        mail_service.py  # SMTP contact mail
         packager.py
         publisher/       # Publisher protocol and implementations
         dns_service.py
@@ -296,11 +308,13 @@ shuru/
 
 **Open**
 
-- Hosting for Shuru itself (section 11): Node.js or a VPS. To be chosen later.
+- Dockerfile, compose file and reverse proxy with TLS for the VPS (section 11).
 - Confirm the GoDaddy hosting plan supports Node.js apps (Day 1 check). A plan exists, so GoDaddy Hosting is the default and the static-host fallback is only for failures. Details to be explored later.
 
 **Decided**
 
+- Hosting for Shuru itself: **GoDaddy Gen4 VPS with Docker** (section 11).
+- Contact form: backend sends mail over SMTP through the GoDaddy Titan mailbox (`smtpout.secureserver.net`, full address as username); password only in the environment.
 - Run store: **SQLite**, not JSON files.
 - Progress updates: **polling** (section 5.1), not SSE.
 - Hindi: **generated natively** by Claude (section 3.1), not translated from English.
