@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Run } from "./api/types";
-import { ContactForm } from "./components/ContactForm";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DomainStep } from "./components/DomainStep";
 import { ErrorMessage } from "./components/ErrorMessage";
@@ -10,6 +9,7 @@ import { Loading } from "./components/Loading";
 import { Logo } from "./components/Logo";
 import { PreviewStep } from "./components/PreviewStep";
 import { ReviewStep } from "./components/ReviewStep";
+import { SupportDialog } from "./components/SupportDialog";
 import { Stepper } from "./components/Stepper";
 import { useAction } from "./hooks/useAction";
 import { isStepAvailable, naturalStep, STEPS, type Step } from "./navigation";
@@ -19,6 +19,7 @@ export function App() {
   const route = useRoute();
   const [run, setRun] = useState<Run | null>(null);
   const [confirmingStartOver, setConfirmingStartOver] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const { run: fetchRun, error: loadError } = useAction(api.getRun);
   const main = useRef<HTMLElement>(null);
 
@@ -126,15 +127,24 @@ export function App() {
   return (
     <div className="page">
       <header className="site-header">
-        <button type="button" className="logo" title="Start a new site" onClick={requestStartOver}>
-          <Logo />
-        </button>
+        <div className="header-top">
+          <button type="button" className="logo" title="Start a new site" onClick={requestStartOver}>
+            <Logo />
+          </button>
+          <button type="button" className="nav-link" onClick={() => setSupportOpen(true)}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
+              <rect x="3" y="14" width="4" height="6" rx="1.5" />
+              <rect x="17" y="14" width="4" height="6" rx="1.5" />
+              <path d="M19 20c0 1.5-2 2-5 2" />
+            </svg>
+            <span className="nav-link-label">Support</span>
+          </button>
+        </div>
         <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
       </header>
       <main ref={main}>{renderStep()}</main>
-      <footer className="site-footer">
-        <ContactForm />
-      </footer>
+      <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       <ConfirmDialog
         open={confirmingStartOver}

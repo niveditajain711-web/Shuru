@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DomainOffer, Run } from "./api/types";
@@ -89,6 +89,27 @@ async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("heading", { name: "Review your domain" });
 }
 
+describe("support dialog", () => {
+  it("opens from the header, keeps wizard state, and closes on Escape", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByLabelText("Your idea"), "pickles");
+
+    expect(screen.queryByText("Contact us")).toBeNull();
+    const support = screen.getByRole("button", { name: "Support" });
+    await user.click(support);
+    expect(screen.getByText("Hi, need help? We reply within 1-2 days.")).toBeTruthy();
+    expect(screen.getByLabelText("Your name")).toBeTruthy();
+
+    const dialog = document.querySelector(".support-dialog") as HTMLDialogElement;
+    expect(dialog.hasAttribute("open")).toBe(true);
+    // Escape fires a cancelable "cancel" event on a native <dialog>.
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
+    expect((screen.getByLabelText("Your idea") as HTMLTextAreaElement).value).toBe("pickles");
+  });
+});
+
 describe("wizard flow", () => {
   it("walks from idea to preview and keeps the step in the URL", async () => {
     const user = userEvent.setup();
@@ -100,6 +121,18 @@ describe("wizard flow", () => {
     await user.click(screen.getByRole("button", { name: "Confirm and build my site" }));
     await screen.findByRole("heading", { name: "Preview your site" });
     expect(window.location.hash).toBe("#/run/r1/preview");
+
+    // Device and language toggles only restyle or re-point the iframe: no API calls.
+    const before = calls.length;
+    const frame = () => document.querySelector("iframe.preview") as HTMLIFrameElement;
+    expect(frame().classList.contains("mobile")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Mobile" }));
+    expect(frame().classList.contains("mobile")).toBe(true);
+    await user.click(screen.getByRole("button", { name: "हिन्दी" }));
+    await user.click(screen.getByRole("button", { name: "Desktop" }));
+    expect(frame().classList.contains("mobile")).toBe(false);
+    expect(frame().getAttribute("src")).toContain("lang=hi");
+    expect(calls.length).toBe(before);
   });
 
   it("generates the site only after the user confirms", async () => {
