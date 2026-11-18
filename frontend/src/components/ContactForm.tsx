@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { useAction } from "../hooks/useAction";
 import { ErrorMessage } from "./ErrorMessage";
@@ -6,14 +6,24 @@ import { Loading } from "./Loading";
 
 const MAX_MESSAGE_LENGTH = 5000;
 
+interface Props {
+  /** Whether the surrounding modal is open; reopening after a send starts a fresh form. */
+  open: boolean;
+  onClose: () => void;
+}
+
 /** Contact form: the backend emails the message to the Shuru mailbox. No mail credentials are in the browser. */
-export function ContactForm() {
+export function ContactForm({ open, onClose }: Props) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [website, setWebsite] = useState(""); // honeypot, hidden from people
   const [sent, setSent] = useState(false);
   const { run: sendContact, loading, error } = useAction(api.sendContact);
+
+  useEffect(() => {
+    if (open) setSent(false);
+  }, [open]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -28,24 +38,24 @@ export function ContactForm() {
 
   if (sent) {
     return (
-      <section className="card" aria-labelledby="contact-title">
-        <h2 id="contact-title">Contact us</h2>
+      <div className="contact-sent">
         <p className="notice" role="status">
           Thanks! Your message has been sent. We'll reply by email.
         </p>
         <div className="actions">
-          <button type="button" className="secondary" onClick={() => setSent(false)}>
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+          <button type="button" className="link" onClick={() => setSent(false)}>
             Send another message
           </button>
         </div>
-      </section>
+      </div>
     );
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit} aria-labelledby="contact-title">
-      <h2 id="contact-title">Contact us</h2>
-      <p className="lead">Questions or feedback? Send us a message and we'll reply by email.</p>
+    <form className="contact-form" onSubmit={handleSubmit} aria-labelledby="support-title">
 
       <div className="field">
         <label htmlFor="contact-name">Your name</label>

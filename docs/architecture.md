@@ -90,7 +90,7 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 - Loading states (spinner and skeletons) announce themselves to screen readers; each new screen moves focus to its heading and updates the page title.
 - Review-cost screen (after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
 - Confirm screen shows domain, price, quote expiry countdown and the preview. The Approve button is the only way to trigger step 8.
-- **Contact form** (`ContactForm`) in the page footer, below every screen. It posts to `POST /contact`, shows a thank-you or a plain error, and keeps the typed text on failure. It includes a hidden honeypot field. No mail credentials exist in the browser.
+- **Support modal** (`SupportDialog`, native `<dialog>` with `showModal()` for focus trap, Esc and focus return) opened from a quiet **Support** link in the header; it wraps `ContactForm`. Wizard state lives in `App`, so opening or closing the modal does not touch it. The form posts to `POST /contact`, shows a thank-you or a plain error, and keeps the typed text on failure. It includes a hidden honeypot field. No mail credentials exist in the browser.
 - Launch screen polls `GET /runs/{id}` every 2 seconds (see 5.1) and shows the live URL and launch kit.
 
 ### 4.2 Backend (Python + FastAPI)

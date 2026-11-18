@@ -6,9 +6,11 @@ import { ContactForm } from "./ContactForm";
 
 let bodies: unknown[];
 let status: number;
+const onClose = vi.fn();
 
 beforeEach(() => {
   bodies = [];
+  onClose.mockClear();
   status = 200;
   vi.stubGlobal(
     "fetch",
@@ -34,7 +36,7 @@ async function fill(user: ReturnType<typeof userEvent.setup>) {
 describe("ContactForm", () => {
   it("keeps Send disabled until every field is filled", async () => {
     const user = userEvent.setup();
-    render(<ContactForm />);
+    render(<ContactForm open onClose={onClose} />);
     const send = screen.getByRole("button", { name: "Send message" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     await fill(user);
@@ -43,17 +45,22 @@ describe("ContactForm", () => {
 
   it("posts the message and confirms", async () => {
     const user = userEvent.setup();
-    render(<ContactForm />);
+    render(<ContactForm open onClose={onClose} />);
     await fill(user);
     await user.click(screen.getByRole("button", { name: "Send message" }));
     await screen.findByText(/Your message has been sent/);
     expect(bodies).toEqual([{ name: "Asha", email: "asha@example.com", message: "Hello", website: "" }]);
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Send another message" }));
+    expect(screen.getByRole("button", { name: "Send message" })).toBeTruthy();
   });
 
   it("shows a plain error and keeps what was typed", async () => {
     status = 502;
     const user = userEvent.setup();
-    render(<ContactForm />);
+    render(<ContactForm open onClose={onClose} />);
     await fill(user);
     await user.click(screen.getByRole("button", { name: "Send message" }));
     expect((await screen.findByRole("alert")).textContent).toContain("couldn't send your message");

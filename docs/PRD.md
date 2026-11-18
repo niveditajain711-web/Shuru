@@ -115,7 +115,7 @@ The only step that spends money or changes external state. In order:
 
 ### Contact form
 
-- A "Contact us" card sits below every wizard screen. Fields: name (1 to 100 characters), email, message (1 to 5000 characters). Send is disabled until all three are filled.
+- A **Support** link in the header (right of the logo; icon only on narrow screens) opens a modal with the form and the line "Hi, need help? We reply within 1-2 days." The modal closes on the X, Esc or a backdrop click, traps focus, returns focus to the link, locks page scroll, and is full-screen under 600px. Wizard state is untouched. After a send it shows the thank-you with **Close** and **Send another message**. Fields: name (1 to 100 characters), email, message (1 to 5000 characters). Send is disabled until all three are filled.
 - `POST /api/contact` validates the input, then sends one email from the Shuru mailbox to the Shuru mailbox with the visitor's address in `Reply-To`. The From address is never the visitor's, because the SMTP server would reject or spam-flag it.
 - Abuse protection: a hidden honeypot field (filled means a bot; the server answers success and sends nothing), a per-client limit of 5 messages per hour (429 with a plain message), and rejection of line breaks in name and email (header injection).
 - On success the user sees a thank-you. On failure they see a plain message and keep what they typed. If SMTP is not configured the endpoint returns 503 and the log says which variables are missing.

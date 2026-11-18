@@ -584,12 +584,36 @@ legend {
 }
 
 /* --- Preview --- */
+/* The Preview step is wider than the others. The header keeps its normal width and stays centered. */
+.page:has(.preview-card) {
+  max-width: 1100px;
+}
+
+.page:has(.preview-card) .site-header {
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .preview {
   width: 100%;
-  height: clamp(420px, 70vh, 760px);
+  height: clamp(480px, 70vh, 760px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
+}
+
+/* Phone-sized frame: the same page, narrower, so its responsive layout shows. */
+.preview.mobile {
+  align-self: center;
+  width: 390px;
+  max-width: 100%;
+  border-radius: 20px;
 }
 
 .next-panel {
@@ -718,9 +742,84 @@ dialog .actions {
   }
 }
 
-/* --- Contact form --- */
-.site-footer {
-  margin-top: var(--space-6);
+/* --- Support link and modal --- */
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* A quiet text link in the header: same green, no fill. */
+button.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--accent);
+  background: none;
+  border-color: transparent;
+}
+
+button.nav-link:hover:not(:disabled) {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+dialog.support-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  overflow-y: auto;
+}
+
+.support-body,
+.contact-form,
+.contact-sent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.support-body {
+  padding: var(--space-5);
+}
+
+.support-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.support-head h2 {
+  margin: 0;
+}
+
+button.icon-button {
+  display: inline-flex;
+  padding: var(--space-1);
+  color: var(--muted);
+  background: none;
+  border-color: transparent;
+}
+
+button.icon-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
+/* A button that reads as a text link, for the quiet secondary action. */
+button.link {
+  padding-inline: var(--space-1);
+  color: var(--accent);
+  text-decoration: underline;
+  background: none;
+  border-color: transparent;
+}
+
+button.link:hover:not(:disabled) {
+  color: var(--accent-strong);
+  background: none;
 }
 
 /* Honeypot field: off-screen rather than display:none, which some bots skip. */
@@ -730,4 +829,28 @@ dialog .actions {
   width: 1px;
   height: 1px;
   overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .nav-link-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  dialog.support-dialog {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .support-body {
+    padding: var(--space-5) var(--space-4);
+  }
 }
