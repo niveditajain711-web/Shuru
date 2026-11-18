@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Secrets (ANTHROPIC_API_KEY, GDDY_PAT, SHURU_SMTP_*) are read from this file at run time.
+    # It exists only on the server (and your laptop), is gitignored, and is not copied into the image.
+    env_file: ./backend/.env
+    volumes:
+      - shuru_data:/app/data
+    # No published ports: only Caddy, on the same compose network, can reach the backend.
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-shuru.biz}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data # keeps the HTTPS certificates across restarts
+      - caddy_config:/config
+
+volumes:
+  shuru_data:
+  caddy_data:
+  caddy_config:

@@ -251,7 +251,7 @@ Replay mode serves cached successful runs from JSON fixtures, for demos and offl
 
 ## 11. Deployment and hosting
 
-**Decided:** Shuru runs on the **GoDaddy Gen4 Linux VPS (4 vCPU) with Docker**. Setup: generate an SSH key, install it on the server, connect with it, package the app with Docker and run it. Not built yet: Dockerfile(s), compose file, reverse proxy with TLS.
+**Decided:** Shuru runs on the **GoDaddy Gen4 Linux VPS (4 vCPU, 8 GB) with Docker**, OS **Ubuntu 24.04 LTS**, at **shuru.biz**. Two containers from `docker-compose.yml`: `backend` (FastAPI via uvicorn, non-root, SQLite in a volume, port 8000 not published) and `web` (Caddy: serves the built React app, proxies `/api/*` to the backend, and obtains HTTPS certificates automatically; also redirects `www`). Only ports 80 and 443 are open (`ufw`). DNS: an A record for `@` and a CNAME for `www`; the Titan mail DNS records must be left alone. The backend runs with `--proxy-headers`, so the contact-form limiter sees the real client IP from Caddy. Step-by-step commands are in the README.
 
 **Secrets on the VPS:** `ANTHROPIC_API_KEY`, `GDDY_PAT` and `SHURU_SMTP_*` are passed at run time (`docker run --env-file /etc/shuru/backend.env`, file readable only by the deploy user, or compose secrets). They are not baked into the image, not copied by `COPY`, and not committed; keep `.env` in `.dockerignore` as well as `.gitignore`.
 
@@ -308,7 +308,7 @@ shuru/
 
 **Open**
 
-- Dockerfile, compose file and reverse proxy with TLS for the VPS (section 11).
+- Container builds not yet exercised on the VPS (first deploy pending); no CI/CD, deploys are `git pull` plus `docker compose up -d --build`.
 - Confirm the GoDaddy hosting plan supports Node.js apps (Day 1 check). A plan exists, so GoDaddy Hosting is the default and the static-host fallback is only for failures. Details to be explored later.
 
 **Decided**
