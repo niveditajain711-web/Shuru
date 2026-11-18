@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Run } from "./api/types";
+import { ContactForm } from "./components/ContactForm";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DomainStep } from "./components/DomainStep";
 import { ErrorMessage } from "./components/ErrorMessage";
@@ -131,6 +132,9 @@ export function App() {
         <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
       </header>
       <main ref={main}>{renderStep()}</main>
+      <footer className="site-footer">
+        <ContactForm />
+      </footer>
 
       <ConfirmDialog
         open={confirmingStartOver}

@@ -76,3 +76,27 @@ class GddyError(AppError):
 
     def __init__(self) -> None:
         super().__init__("We couldn't reach the domain service just now. Please try again.")
+
+
+class RateLimitedError(AppError):
+    status_code = 429
+    code = "rate_limited"
+
+    def __init__(self) -> None:
+        super().__init__("You've sent a few messages already. Please try again a little later.")
+
+
+class MailError(AppError):
+    status_code = 502
+    code = "mail_failed"
+
+    def __init__(self) -> None:
+        super().__init__("We couldn't send your message just now. Please try again in a moment.")
+
+
+class MailNotConfiguredError(AppError):
+    status_code = 503
+    code = "mail_not_configured"
+
+    def __init__(self) -> None:
+        super().__init__("Our contact form isn't available right now. Please try again later.")

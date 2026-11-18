@@ -28,3 +28,10 @@ export interface Run {
   domain: DomainOffer | null;
   regenerations: number;
 }
+
+export interface ContactMessage {
+  name: string;
+  email: string;
+  message: string;
+  website: string; // honeypot, always empty for real visitors
+}

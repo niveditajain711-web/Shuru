@@ -32,3 +32,16 @@ class Settings(BaseSettings):
     gddy_timeout_seconds: float = 15.0
 
     regeneration_cap: int = 3
+
+    # Contact form mail. The mailbox is a GoDaddy Titan mailbox, which needs GoDaddy's SMTP server
+    # (`smtpout.secureserver.net`), not `smtp.titan.email`. The username is the full email address.
+    # The password comes only from the environment (`SHURU_SMTP_PASSWORD`, in the gitignored `.env`
+    # locally and in a secret on the server); it is never in code.
+    smtp_host: str = "smtpout.secureserver.net"
+    smtp_port: int = 465  # 465 = implicit TLS; any other port uses STARTTLS (e.g. 587)
+    smtp_user: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_timeout_seconds: float = 15.0
+    contact_to: str = ""  # where messages go; defaults to smtp_user
+    contact_rate_limit: int = 5  # messages per client per window
+    contact_rate_window_seconds: float = 3600.0

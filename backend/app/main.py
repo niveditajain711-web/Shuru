@@ -10,9 +10,11 @@ from app.config import Settings
 from app.errors import AppError
 from app.logging_config import setup_logging
 from app.orchestrator import Orchestrator
+from app.rate_limit import RateLimiter
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
 from app.services.gddy_client import GddyClient
+from app.services.mail_service import MailService
 from app.services.site_service import SiteService
 from app.store import RunStore
 
@@ -32,9 +34,11 @@ def build_orchestrator(settings: Settings) -> Orchestrator:
     )
 
 
-def create_app(orchestrator: Orchestrator) -> FastAPI:
+def create_app(orchestrator: Orchestrator, mailer: MailService, contact_limiter: RateLimiter) -> FastAPI:
     app = FastAPI(title="Shuru")
     app.state.orchestrator = orchestrator
+    app.state.mailer = mailer
+    app.state.contact_limiter = contact_limiter
     app.include_router(router)
     app.add_exception_handler(AppError, _handle_app_error)
     app.add_exception_handler(Exception, _handle_unexpected_error)
@@ -50,8 +54,14 @@ def create_default_app() -> FastAPI:
     setup_logging(settings.log_level)
     if not settings.gddy_pat.get_secret_value():
         logger.warning("GDDY_PAT is not set; GoDaddy calls will fail")
+    if not (settings.smtp_user and settings.smtp_password.get_secret_value()):
+        logger.warning("SHURU_SMTP_USER / SHURU_SMTP_PASSWORD are not set; the contact form will be unavailable")
     logger.info("GoDaddy read base url=%s", settings.gddy_read_base_url)
-    return create_app(build_orchestrator(settings))
+    return create_app(
+        build_orchestrator(settings),
+        MailService(settings),
+        RateLimiter(settings.contact_rate_limit, settings.contact_rate_window_seconds),
+    )
 
 
 def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
