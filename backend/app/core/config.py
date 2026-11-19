@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     regeneration_cap: int = 3
 
+    # New runs per client per window. Each run costs a Claude call, so this protects the Claude spend
+    # and the GoDaddy quota on the public site. Keyed by client IP (Caddy forwards it; see architecture 10).
+    run_rate_limit: int = 10
+    run_rate_window_seconds: float = 3600.0
+
     # Contact form mail. The mailbox is a GoDaddy Titan mailbox, which needs GoDaddy's SMTP server
     # (`smtpout.secureserver.net`), not `smtp.titan.email`. The username is the full email address.
     # The password comes only from the environment (`SHURU_SMTP_PASSWORD`, in the gitignored `.env`

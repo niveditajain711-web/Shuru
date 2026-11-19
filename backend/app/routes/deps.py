@@ -19,6 +19,16 @@ def get_contact_limiter(request: Request) -> RateLimiter:
     return request.app.state.contact_limiter
 
 
+def get_run_limiter(request: Request) -> RateLimiter:
+    return request.app.state.run_limiter
+
+
+def client_key(request: Request) -> str:
+    """The key rate limits are counted by: the client IP (Caddy forwards the real one)."""
+    return request.client.host if request.client else "unknown"
+
+
 MailerDep = Annotated[MailService, Depends(get_mailer)]
 LimiterDep = Annotated[RateLimiter, Depends(get_contact_limiter)]
+RunLimiterDep = Annotated[RateLimiter, Depends(get_run_limiter)]
 OrchestratorDep = Annotated[Orchestrator, Depends(get_orchestrator)]
