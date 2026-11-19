@@ -405,6 +405,6 @@ shuru/
 - Run store: **SQLite**, not JSON files.
 - Progress updates: **polling** (section 5.1), not SSE.
 - Hindi: **generated natively** by Claude (section 3.1), not translated from English.
-- Logo click: **starts a fresh run** (with confirmation); the clickable Idea step is how the user revisits the current summary.
+- Logo click: **starts a fresh run** (with confirmation); the clickable Idea step shows the idea and the summary read-only. Creating a run goes straight to the Domain step (a run in `briefed` waits there and searches when it opens); there is no separate summary screen.
 - Preview: **locked** once generated; "Start over" is the way to change the domain. Unlocking later is possible with a small backend change (swap the domain and re-render without calling Claude).
 - Navigation: **URL hash** routing, no router library.

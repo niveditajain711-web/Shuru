@@ -100,7 +100,7 @@ export function App() {
         return (
           <IdeaStep
             run={activeRun}
-            onCreated={(created) => updateRun(created, "idea")}
+            onCreated={(created) => updateRun(created, "domain")}
             onContinue={() => activeRun && navigate(activeRun.id, naturalStep(activeRun))}
           />
         );

@@ -121,7 +121,6 @@ async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   render(<App />);
   await user.type(screen.getByLabelText("Your idea"), "pickles");
   await user.click(screen.getByRole("button", { name: "Create my business summary" }));
-  await user.click(await screen.findByRole("button", { name: "Find domains" }));
   await user.click(await screen.findByLabelText(/achaar1\.com/));
   await user.click(screen.getByRole("button", { name: "Choose this domain" }));
   await screen.findByRole("heading", { name: "Check the price" });
@@ -310,13 +309,52 @@ describe("checkout", () => {
   });
 });
 
+describe("after the idea is submitted", () => {
+  it("goes straight to the domain step, which searches by itself", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.click(screen.getByRole("button", { name: "Create my business summary" }));
+
+    await screen.findByRole("heading", { name: "Choose your domain" });
+    expect(window.location.hash).toBe("#/run/r1/domain");
+    expect(screen.queryByRole("button", { name: "Find domains" })).toBeNull();
+    expect(screen.getByText("Pickles like home")).toBeTruthy(); // the summary is on this screen
+    await screen.findByLabelText(/achaar1\.com/);
+    expect(calls.filter((call) => call.includes("/domains"))).toHaveLength(1);
+  });
+
+  it("shows the idea read-only when the user goes back to the Idea step", async () => {
+    const user = userEvent.setup();
+    runs.r1 = makeRun({ state: "domains_listed", domains: [OFFER], idea: "I make pickles" });
+    window.location.hash = "#/run/r1/idea";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Your idea" });
+    expect(screen.getByText("I make pickles")).toBeTruthy();
+    expect(screen.queryByLabelText("Your idea")).toBeNull(); // no form: the idea cannot be changed
+    expect(screen.getByText("Pickles like home")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Back to domains" }));
+    await screen.findByRole("heading", { name: "Choose your domain" });
+  });
+
+  it("offers to go back to the site once it has been written", async () => {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/idea";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Your idea" });
+    expect(screen.getByRole("button", { name: "Back to your site" })).toBeTruthy();
+  });
+});
+
 describe("domain step business summary", () => {
   async function openDomainStep(user: ReturnType<typeof userEvent.setup>) {
     render(<App />);
     await user.type(screen.getByLabelText("Your idea"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
-    await user.click(await screen.findByRole("button", { name: "Find domains" }));
-    await screen.findByRole("heading", { name: "Choose your domain" });
+      await screen.findByRole("heading", { name: "Choose your domain" });
   }
 
   it("shows the tagline and name ideas, with audience and tone folded away", async () => {

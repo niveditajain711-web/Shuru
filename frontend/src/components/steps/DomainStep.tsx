@@ -65,7 +65,8 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
     <section className="card">
       <h1>Choose your domain</h1>
       <p className="lead">
-        These domains are available to register. Prices are for the first year and exclude taxes and fees.
+        We wrote a short summary of your business and searched for domains to match. These domains are available to
+        register. Prices are for the first year and exclude taxes and fees.
       </p>
 
       <BusinessSummary
