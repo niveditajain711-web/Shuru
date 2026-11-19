@@ -2,10 +2,22 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DomainOffer, Run } from "./api/types";
+import type { DomainOffer, Quote, Run } from "./api/types";
 import { App } from "./App";
 
 const OFFER: DomainOffer = { name: "achaar1.com", price: 9.19, renewal_price: 11.59, currency: "USD" };
+
+const QUOTE: Quote = {
+  domain: "achaar1.com",
+  period: 1,
+  price: 9.19,
+  renewal_price: 11.59,
+  currency: "USD",
+  fees: [],
+  agreements: [{ type: "API_DPA", title: "Domain Purchase Agreement", url: "https://example.test/agreement" }],
+  expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+  demo: true,
+};
 
 let runs: Record<string, Run>;
 let calls: string[];
@@ -19,6 +31,8 @@ function makeRun(overrides: Partial<Run> = {}): Run {
     brief: { audience: "Home cooks", tone: "Warm", tagline: "Pickles like home", name_ideas: ["achaar"] },
     domains: [],
     domain: null,
+    quote: null,
+    purchase: null,
     regenerations: 0,
     ...overrides,
   };
@@ -55,6 +69,29 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     case "generate":
       Object.assign(run, { state: "site_generated" });
       return Promise.resolve(json(run));
+    case "quote":
+      run.quote = QUOTE;
+      return Promise.resolve(json(run));
+    case "purchase": {
+      const body = JSON.parse(String(init?.body));
+      if (body.price !== QUOTE.price || !body.agreement_types.includes("API_DPA")) {
+        return Promise.resolve(json({ error: { code: "confirmation_mismatch", message: "Please review again." } }, 409));
+      }
+      Object.assign(run, {
+        state: "purchased",
+        purchase: {
+          domain: QUOTE.domain,
+          status: "completed",
+          demo: true,
+          price: QUOTE.price,
+          currency: "USD",
+          registration_id: null,
+          agreed_at: new Date().toISOString(),
+          expires_at: null,
+        },
+      });
+      return Promise.resolve(json(run));
+    }
     default:
       return Promise.resolve(json({ error: { code: "x", message: "unexpected" } }, 500));
   }
@@ -151,6 +188,71 @@ describe("wizard flow", () => {
     await screen.findByRole("heading", { name: "Pick your domain" });
     expect(calls.filter((call) => call.includes("/domains")).length).toBe(searches);
     expect((screen.getByLabelText(/achaar1\.com/) as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("checkout", () => {
+  function openCheckout() {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+  }
+
+  it("gets a quote, needs the agreement ticked, and finishes a demo purchase", async () => {
+    const user = userEvent.setup();
+    openCheckout();
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(await screen.findByText(/no domain will be registered/)).toBeTruthy();
+    const buy = screen.getByRole("button", { name: "Complete demo purchase" }) as HTMLButtonElement;
+    expect(buy.disabled).toBe(true);
+    expect(calls).toContain("POST /runs/r1/quote");
+
+    expect(screen.getByRole("link", { name: "Domain Purchase Agreement" }).getAttribute("href")).toBe(
+      "https://example.test/agreement",
+    );
+    await user.click(screen.getByLabelText(/I have read and agree/));
+    expect(buy.disabled).toBe(false);
+    await user.click(buy);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+    expect(screen.getByText(/\(not charged\)/)).toBeTruthy();
+  });
+
+  it("opens the Buy step from the preview", async () => {
+    const user = userEvent.setup();
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/preview";
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Buy domain" }));
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(window.location.hash).toBe("#/run/r1/checkout");
+  });
+
+  it("shows the confirmation when a purchased run is opened again", async () => {
+    runs.r1 = makeRun({
+      state: "purchased",
+      domain: OFFER,
+      purchase: {
+        domain: "achaar1.com", status: "completed", demo: true, price: 9.19, currency: "USD",
+        registration_id: null, agreed_at: new Date().toISOString(), expires_at: null,
+      },
+    });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+  });
+
+  it("does not quote again while the stored quote is still locked", async () => {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER], quote: QUOTE });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(calls.some((call) => call.endsWith("/quote"))).toBe(false);
   });
 });
 

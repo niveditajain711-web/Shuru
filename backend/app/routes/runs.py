@@ -10,6 +10,7 @@ from app.models import (
     CreateRunRequest,
     GenerateSiteRequest,
     Lang,
+    PurchaseRequest,
     Run,
 )
 from app.routes.deps import OrchestratorDep, RunLimiterDep, client_key
@@ -52,6 +53,21 @@ def generate_site(run_id: str, body: GenerateSiteRequest, orchestrator: Orchestr
 @router.post("/runs/{run_id}/regenerate", response_model=Run)
 def regenerate_site(run_id: str, orchestrator: OrchestratorDep) -> Run:
     return orchestrator.regenerate_site(run_id)
+
+
+@router.post("/runs/{run_id}/quote", response_model=Run)
+def quote_purchase(run_id: str, orchestrator: OrchestratorDep) -> Run:
+    return orchestrator.quote_purchase(run_id)
+
+
+@router.post("/runs/{run_id}/purchase", response_model=Run)
+def purchase(run_id: str, body: PurchaseRequest, orchestrator: OrchestratorDep) -> Run:
+    return orchestrator.purchase(run_id, body)
+
+
+@router.post("/runs/{run_id}/purchase/refresh", response_model=Run)
+def refresh_purchase(run_id: str, orchestrator: OrchestratorDep) -> Run:
+    return orchestrator.refresh_purchase(run_id)
 
 
 @router.get("/runs/{run_id}/preview", response_class=HTMLResponse)

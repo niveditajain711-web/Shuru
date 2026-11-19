@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Run } from "./api/types";
 import { ConfirmDialog } from "./components/dialogs/ConfirmDialog";
+import { CheckoutStep } from "./components/steps/CheckoutStep";
 import { DomainStep } from "./components/steps/DomainStep";
 import { ErrorMessage } from "./components/ui/ErrorMessage";
 import { IdeaStep } from "./components/steps/IdeaStep";
@@ -120,7 +121,27 @@ export function App() {
           )
         );
       case "preview":
-        return activeRun && <PreviewStep run={activeRun} onUpdated={updateRun} onStartOver={requestStartOver} />;
+        return (
+          activeRun && (
+            <PreviewStep
+              run={activeRun}
+              onUpdated={updateRun}
+              onBuy={() => navigate(activeRun.id, "checkout")}
+              onStartOver={requestStartOver}
+            />
+          )
+        );
+      case "checkout":
+        return (
+          activeRun && (
+            <CheckoutStep
+              run={activeRun}
+              onUpdated={updateRun}
+              onBack={() => navigate(activeRun.id, "preview")}
+              onStartOver={requestStartOver}
+            />
+          )
+        );
     }
   }
 

@@ -1,14 +1,16 @@
 import logging
 import re
 import time
+import uuid
 from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from app.core.errors import GddyError
-from app.models import DOMAIN_LABEL_PATTERN, DOMAIN_PATTERN, DomainOffer
+from app.core.errors import DomainTakenError, GddyError
+from app.models import DOMAIN_LABEL_PATTERN, DOMAIN_PATTERN, Agreement, DomainOffer, Quote, QuoteFee
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,46 @@ class _Availability(BaseModel):
 
 class _Availabilities(BaseModel):
     items: list[_Availability]
+
+
+class _Fee(BaseModel):
+    type: str
+    fee: _Money
+
+
+class _Agreement(BaseModel):
+    agreementType: str
+    title: str
+    url: str | None = None
+
+
+class _QuoteItem(BaseModel):
+    domain: str | None = None
+    period: int | None = None
+    price: _Money | None = None
+    renewalPrice: _Money | None = None
+    fees: list[_Fee] = []
+
+
+class _RegistrationQuote(BaseModel):
+    """Per the OpenAPI spec the price is at the top level. The guide's sample nests it in `items`; both are read."""
+
+    domain: str
+    available: bool
+    quoteToken: str | None = None
+    expiresAt: datetime | None = None
+    period: int | None = None
+    price: _Money | None = None
+    renewalPrice: _Money | None = None
+    fees: list[_Fee] = []
+    requiredAgreements: list[_Agreement] = []
+    items: list[_QuoteItem] = []
+
+
+class _Registration(BaseModel):
+    registrationId: str
+    status: str
+    expiresAt: datetime | None = None
 
 
 class GddyClient:
@@ -103,16 +145,85 @@ class GddyClient:
             raise GddyError()
         return offer
 
-    def _send(self, method: str, path: str, **kwargs: object) -> object:
+    def quote_registration(self, domain: str, period: int = 1) -> Quote:
+        """Lock the price of registering one domain. Free and read-only.
+
+        Raises DomainTakenError if the domain cannot be registered. The returned quote carries the
+        token and a fresh idempotency key for the registration that will use it.
+        """
+        _require(re.fullmatch(DOMAIN_PATTERN, domain) and 1 <= period <= 10, "domain")
+        body = self._send("POST", "/registration-quotes", json={"domain": domain, "period": period})
+        parsed = _parse(_RegistrationQuote, body, "registration quote")
+        if not parsed.available:
+            raise DomainTakenError()
+
+        item = parsed.items[0] if parsed.items else _QuoteItem()
+        price = parsed.price or item.price
+        fees = parsed.fees or item.fees
+        renewal = parsed.renewalPrice or item.renewalPrice
+        if price is None or parsed.quoteToken is None or parsed.expiresAt is None or not parsed.requiredAgreements:
+            logger.error("gddy quote is missing price, token, expiry or agreements domain=%s", domain)
+            raise GddyError()
+        if parsed.domain != domain or (parsed.period or item.period or period) != period:
+            logger.error("gddy quote does not match the request domain=%s quoted=%s", domain, parsed.domain)
+            raise GddyError()
+        return Quote(
+            domain=domain,
+            period=period,
+            price=_to_amount(price),
+            renewal_price=_to_amount(renewal) if renewal and renewal.currencyCode == price.currencyCode else None,
+            currency=price.currencyCode,
+            fees=[
+                QuoteFee(type=f.type, currency=f.fee.currencyCode, value=f.fee.value, amount=_to_amount(f.fee))
+                for f in fees
+            ],
+            agreements=[Agreement(type=a.agreementType, title=a.title, url=a.url) for a in parsed.requiredAgreements],
+            expires_at=parsed.expiresAt,
+            token=parsed.quoteToken,
+            idempotency_key=str(uuid.uuid4()),
+        )
+
+    def register(self, quote: Quote, agreed_at: datetime) -> tuple[str, str]:
+        """Register the quoted domain. THIS CHARGES THE ACCOUNT and cannot be undone.
+
+        Sends the quote's idempotency key, so repeating the call for the same quote (after a timeout,
+        say) does not buy the domain twice. Returns the registration id and its status.
+        """
+        consent: dict[str, object] = {
+            "agreedAt": agreed_at.isoformat().replace("+00:00", "Z"),
+            "agreementTypes": [a.type for a in quote.agreements],
+        }
+        if quote.fees:
+            consent["acknowledgedFees"] = [
+                {"type": f.type, "fee": {"currencyCode": f.currency, "value": f.value}} for f in quote.fees
+            ]
+        body = self._send(
+            "POST",
+            "/registrations",
+            headers={"Idempotency-Key": quote.idempotency_key},
+            json={"quoteToken": quote.token, "domain": quote.domain, "period": quote.period, "consent": consent},
+        )
+        parsed = _parse(_Registration, body, "registration")
+        logger.info("gddy registration accepted domain=%s registration_id=%s status=%s", quote.domain, parsed.registrationId, parsed.status)
+        return parsed.registrationId, parsed.status
+
+    def get_registration(self, registration_id: str) -> tuple[str, datetime | None]:
+        """Return the registration's status and, once completed, when the domain expires."""
+        _require(re.fullmatch(r"[A-Za-z0-9_-]+", registration_id), "registration id")
+        parsed = _parse(_Registration, self._send("GET", f"/registrations/{registration_id}"), "registration")
+        return parsed.status, parsed.expiresAt
+
+    def _send(self, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: object) -> object:
         url = f"{self._base_url}{path}"
+        all_headers = {**self._headers, **(headers or {})}
         started = time.monotonic()
         try:
-            response = self._http.request(method, url, headers=self._headers, **kwargs)
+            response = self._http.request(method, url, headers=all_headers, **kwargs)
             if response.status_code == 429:
                 delay = _retry_delay(response)
                 logger.warning("gddy rate limited path=%s, retrying in %.1fs", path, delay)
                 time.sleep(delay)
-                response = self._http.request(method, url, headers=self._headers, **kwargs)
+                response = self._http.request(method, url, headers=all_headers, **kwargs)
         except httpx.HTTPError as exc:
             logger.error("gddy request failed method=%s path=%s error=%r", method, path, exc)
             raise GddyError() from exc
@@ -125,6 +236,9 @@ class GddyClient:
             time.monotonic() - started,
             response.headers.get("X-Request-Id"),
         )
+        if response.status_code == 409 and path in ("/registration-quotes", "/registrations"):
+            logger.info("gddy domain is already registered path=%s", path)
+            raise DomainTakenError()
         if response.status_code >= 400:
             logger.error(
                 "gddy error method=%s path=%s status=%d request_id=%s body=%s",

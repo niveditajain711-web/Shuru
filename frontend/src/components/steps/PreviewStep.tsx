@@ -25,10 +25,11 @@ const DEVICES = [
 interface Props {
   run: Run;
   onUpdated: (run: Run) => void;
+  onBuy: () => void;
   onStartOver: () => void;
 }
 
-export function PreviewStep({ run, onUpdated, onStartOver }: Props) {
+export function PreviewStep({ run, onUpdated, onBuy, onStartOver }: Props) {
   const [lang, setLang] = useState<Lang>(run.lang);
   // Only changes the frame's width, so the site's own responsive layout shows. No reload, no API call.
   const [device, setDevice] = useState<Device>("desktop");
@@ -73,10 +74,10 @@ export function PreviewStep({ run, onUpdated, onStartOver }: Props) {
 
       <div className="next-panel">
         <h2>What's next</h2>
-        <p>Next you'll be able to buy your domain and put this site live. That step is coming soon.</p>
+        <p>Happy with how it looks? Buy your domain next. You'll see the final price before you pay.</p>
         <div className="actions">
-          <button type="button" disabled>
-            Buy domain (coming soon)
+          <button type="button" onClick={onBuy}>
+            Buy domain
           </button>
           <button type="button" className="secondary" onClick={onStartOver}>
             Start over

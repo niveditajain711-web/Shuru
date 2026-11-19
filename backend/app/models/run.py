@@ -4,6 +4,7 @@ from typing import Annotated
 from pydantic import BaseModel, StringConstraints
 
 from app.models.common import DomainName, Lang, RunState
+from app.models.purchase import Purchase, Quote
 from app.models.site import Brief, DomainOffer, SiteContent
 
 # --- Run (persisted by the run store and returned by the API) ---
@@ -18,6 +19,8 @@ class Run(BaseModel):
     domains: list[DomainOffer] = []
     domain: DomainOffer | None = None
     site: SiteContent | None = None
+    quote: Quote | None = None
+    purchase: Purchase | None = None
     regenerations: int = 0
     created_at: datetime
     updated_at: datetime

@@ -54,6 +54,22 @@ class ConfirmationMismatchError(AppError):
         super().__init__("The domain or price changed. Please review it again.")
 
 
+class QuoteExpiredError(AppError):
+    status_code = 409
+    code = "quote_expired"
+
+    def __init__(self) -> None:
+        super().__init__("The price is no longer locked. Please review the current price and try again.")
+
+
+class PurchaseFailedError(AppError):
+    status_code = 502
+    code = "purchase_failed"
+
+    def __init__(self) -> None:
+        super().__init__("We couldn't register that domain. Please try again.")
+
+
 class RegenerationLimitError(AppError):
     status_code = 409
     code = "regeneration_limit"

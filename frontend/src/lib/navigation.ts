@@ -1,12 +1,13 @@
 import type { Run } from "../api/types";
 
-export type Step = "idea" | "domain" | "review" | "preview";
+export type Step = "idea" | "domain" | "review" | "preview" | "checkout";
 
 export const STEPS: { id: Step; label: string }[] = [
   { id: "idea", label: "Idea" },
   { id: "domain", label: "Domain" },
   { id: "review", label: "Review" },
   { id: "preview", label: "Preview" },
+  { id: "checkout", label: "Buy" },
 ];
 
 const STEP_ORDER = STEPS.map((step) => step.id);
@@ -25,32 +26,41 @@ export function naturalStep(run: Run): Step {
       return "review";
     case "site_generated":
       return "preview";
+    case "purchasing":
+    case "purchased":
+      return "checkout";
   }
+}
+
+/** Whether the site is not written yet, so the domain can still be changed. */
+function isBeforeSite(run: Run): boolean {
+  return run.state !== "site_generated" && run.state !== "purchasing" && run.state !== "purchased";
 }
 
 /**
  * Which steps the user may open. Once the site is generated the domain is locked (the backend
- * does not allow changing it), so only Idea (read-only) and Preview stay open.
+ * does not allow changing it), so only Idea (read-only), Preview and Buy stay open.
  */
 export function isStepAvailable(step: Step, run: Run | null): boolean {
   if (step === "idea") return true;
   if (!run) return false;
   switch (step) {
     case "domain":
-      return run.state !== "site_generated";
+      return isBeforeSite(run);
     case "review":
       return run.state === "domain_chosen";
     case "preview":
-      return run.state === "site_generated";
+    case "checkout":
+      return !isBeforeSite(run);
   }
 }
 
 /** Why a step cannot be opened right now, in plain language. */
 export function unavailableHint(step: Step, run: Run | null): string {
   if (!run) return "Describe your idea first.";
-  if (run.state === "site_generated") return "Locked once your site is written. Start over to change it.";
+  if (!isBeforeSite(run)) return "Locked once your site is written. Start over to change it.";
   if (step === "review") return "Choose a domain first.";
-  if (step === "preview") return "Confirm your domain first.";
+  if (step === "preview" || step === "checkout") return "Confirm your domain first.";
   return "";
 }
 
@@ -72,7 +82,7 @@ export interface Route {
   step: Step | null;
 }
 
-const RUN_ROUTE = /^#\/run\/([A-Za-z0-9_-]+)(?:\/(idea|domain|review|preview))?$/;
+const RUN_ROUTE = /^#\/run\/([A-Za-z0-9_-]+)(?:\/(idea|domain|review|preview|checkout))?$/;
 
 export function parseRoute(hash: string): Route {
   const match = RUN_ROUTE.exec(hash);

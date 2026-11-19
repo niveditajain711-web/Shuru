@@ -13,6 +13,7 @@ from app.services.orchestrator import Orchestrator
 from app.utils.rate_limit import RateLimiter
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
+from app.services.purchase_service import PurchaseService
 from app.clients.gddy_client import GddyClient
 from app.services.mail_service import MailService
 from app.services.site_service import SiteService
@@ -30,6 +31,12 @@ def build_orchestrator(settings: Settings) -> Orchestrator:
             GddyClient(settings.gddy_read_base_url, settings.gddy_pat.get_secret_value(), settings.gddy_timeout_seconds)
         ),
         sites=SiteService(),
+        purchases=PurchaseService(
+            GddyClient(
+                settings.gddy_purchase_base_url, settings.gddy_pat.get_secret_value(), settings.gddy_timeout_seconds
+            ),
+            settings,
+        ),
         settings=settings,
     )
 
@@ -59,7 +66,11 @@ def create_default_app() -> FastAPI:
         logger.warning("GDDY_PAT is not set; GoDaddy calls will fail")
     if not (settings.smtp_user and settings.smtp_password.get_secret_value()):
         logger.warning("SHURU_SMTP_USER / SHURU_SMTP_PASSWORD are not set; the contact form will be unavailable")
-    logger.info("GoDaddy read base url=%s", settings.gddy_read_base_url)
+    logger.info("GoDaddy read base url=%s purchase base url=%s", settings.gddy_read_base_url, settings.gddy_purchase_base_url)
+    if settings.demo_mode:
+        logger.warning("SHURU_DEMO_MODE is on: purchases are simulated and nothing will be registered or charged")
+    else:
+        logger.warning("SHURU_DEMO_MODE is off: purchases REGISTER REAL DOMAINS and charge the GoDaddy account")
     return create_app(
         build_orchestrator(settings),
         MailService(settings),

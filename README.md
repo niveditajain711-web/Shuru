@@ -2,7 +2,7 @@
 
 One sentence in, a live website on your own domain out. See `PRD.md` for the product and `architecture.md` for the design.
 
-**Status:** milestone 1 (idea, domain, cost review, preview). Nothing in this milestone can spend money. Purchase, hosting, DNS, the launch kit and replay come next.
+**Status:** idea, domain, cost review, preview and purchase. Purchase is in **demo mode** by default (`SHURU_DEMO_MODE=true`), so nothing can spend money until you turn it off. Hosting, DNS, the launch kit and replay come next.
 
 ## Backend
 
@@ -20,6 +20,8 @@ uvicorn app.main:create_default_app --factory --reload
 ```
 
 Settings come from `SHURU_*` environment variables or `backend/.env` (see `app/core/config.py`), for example `SHURU_GDDY_READ_BASE_URL` (default `https://api.ote-godaddy.com/v3/domains`, the test environment) and `SHURU_LOG_LEVEL`. If the test environment returns no domain suggestions, set `SHURU_GDDY_READ_BASE_URL=https://api.godaddy.com/v3/domains`: suggest and availability calls are read-only and cannot spend money. The `gddy` CLI is not needed until the hosting step is built. Each client may start 10 runs per hour (`SHURU_RUN_RATE_LIMIT`, `SHURU_RUN_RATE_WINDOW_SECONDS`); more get a 429, before any Claude call.
+
+**Demo mode and purchasing.** `SHURU_DEMO_MODE` defaults to `true`. The Buy step then asks GoDaddy for a real quote (free) but never calls `POST /v3/domains/registrations`, so nothing is registered or charged, and the screens say so. Quotes need a payment method and registrant contact on the GoDaddy account. Set `SHURU_DEMO_MODE=false` **only** to buy real domains: every confirmed purchase then registers and charges, and anyone holding a run's link can buy (there are no user accounts yet). Quote and registration use `SHURU_GDDY_PURCHASE_BASE_URL` (default production), since a quote token only works where it was issued.
 
 **Contact form mail.** The "Contact us" form emails the Shuru mailbox through GoDaddy's SMTP server. Set these in `backend/.env` (gitignored; see `.env.example`) or the server's environment: `SHURU_SMTP_USER` (the full mailbox address), `SHURU_SMTP_PASSWORD`, and optionally `SHURU_SMTP_HOST` (default `smtpout.secureserver.net`, not `smtp.titan.email`), `SHURU_SMTP_PORT` (default 465; other ports use STARTTLS) and `SHURU_CONTACT_TO`. Never commit the password.
 

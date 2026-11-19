@@ -1,12 +1,15 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.core.errors import ClaudeError, DomainTakenError, GddyError
 from app.main import create_app
-from app.models import Brief, DomainOffer, Lang, SiteContent
+from app.models import Agreement, Brief, DomainOffer, Lang, Quote, SiteContent
 from app.services.orchestrator import Orchestrator
 from app.utils.rate_limit import RateLimiter
+from app.services.purchase_service import PurchaseService
 from app.services.site_service import SiteService
 from app.repositories.run_store import RunStore
 
@@ -70,6 +73,54 @@ class FakeDomains:
         return DomainOffer(name=domain, price=self.fresh_price, renewal_price=15.0, currency="USD")
 
 
+class FakeGddy:
+    """Stands in for GddyClient on the purchase side. Records every call."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.quote_fail = False
+        self.fees: list = []
+        self.registration_status = "COMPLETED"
+        self.statuses: list[str] = []  # what get_registration returns, in order
+        self.expires_in = timedelta(minutes=10)
+
+    def quote_registration(self, domain: str, period: int = 1) -> Quote:
+        self.calls.append("quote")
+        if self.quote_fail:
+            raise GddyError()
+        return Quote(
+            domain=domain,
+            period=period,
+            price=12.0,
+            renewal_price=15.0,
+            currency="USD",
+            fees=self.fees,
+            agreements=[Agreement(type="API_DPA", title="Domain Purchase Agreement", url="https://example.test/a")],
+            expires_at=datetime.now(UTC) + self.expires_in,
+            token="secret-token",
+            idempotency_key="key-1",
+        )
+
+    def register(self, quote: Quote, agreed_at: datetime) -> tuple[str, str]:
+        self.calls.append("register")
+        return "reg-1", self.registration_status
+
+    def get_registration(self, registration_id: str) -> tuple[str, datetime | None]:
+        self.calls.append("get_registration")
+        status = self.statuses.pop(0) if self.statuses else "COMPLETED"
+        return status, datetime.now(UTC) + timedelta(days=365)
+
+
+@pytest.fixture
+def gddy() -> FakeGddy:
+    return FakeGddy()
+
+
+@pytest.fixture
+def demo_mode() -> bool:
+    return True
+
+
 @pytest.fixture
 def claude() -> FakeClaude:
     return FakeClaude()
@@ -81,13 +132,17 @@ def domains() -> FakeDomains:
 
 
 @pytest.fixture
-def orchestrator(tmp_path, claude, domains) -> Orchestrator:
+def orchestrator(tmp_path, claude, domains, gddy, demo_mode) -> Orchestrator:
+    settings = Settings(
+        regeneration_cap=2, demo_mode=demo_mode, purchase_poll_seconds=0, purchase_poll_interval_seconds=0
+    )
     return Orchestrator(
         store=RunStore(tmp_path / "test.sqlite"),
         claude=claude,
         domains=domains,
         sites=SiteService(),
-        settings=Settings(regeneration_cap=2),
+        purchases=PurchaseService(gddy, settings),
+        settings=settings,
     )
 
 

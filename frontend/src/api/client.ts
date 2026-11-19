@@ -1,4 +1,4 @@
-import type { ContactMessage, Lang, Run } from "./types";
+import type { ContactMessage, Lang, PurchaseConsent, Run } from "./types";
 
 const FALLBACK_MESSAGE = "Something went wrong. Please try again.";
 const INVALID_INPUT_MESSAGE = "Please check what you entered and try again.";
@@ -59,6 +59,12 @@ export const api = {
 
   generateSite: (runId: string, domain: string, price: number) =>
     post<Run>(`/runs/${runId}/generate`, { domain, price }),
+
+  quotePurchase: (runId: string) => post<Run>(`/runs/${runId}/quote`),
+
+  purchase: (runId: string, consent: PurchaseConsent) => post<Run>(`/runs/${runId}/purchase`, consent),
+
+  refreshPurchase: (runId: string) => post<Run>(`/runs/${runId}/purchase/refresh`),
 
   regenerateSite: (runId: string) => post<Run>(`/runs/${runId}/regenerate`),
 
