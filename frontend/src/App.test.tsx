@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DomainOffer, Quote, Run } from "./api/types";
 import { App } from "./App";
 
-const OFFER: DomainOffer = { name: "achaar1.com", price: 9.19, renewal_price: 11.59, currency: "USD" };
+const OFFER: DomainOffer = { name: "achaar1.com", price: 9.19, renewal_price: 11.59, currency: "USD", fees: [] };
+const PREMIUM_FEE = { type: "ONE_TIME_PREMIUM_DOMAIN_PURCHASE", currency: "USD", value: 390000, amount: 3900 };
 
 const QUOTE: Quote = {
   domain: "achaar1.com",
@@ -123,7 +124,7 @@ async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "Find domains" }));
   await user.click(await screen.findByLabelText(/achaar1\.com/));
   await user.click(screen.getByRole("button", { name: "Choose this domain" }));
-  await screen.findByRole("heading", { name: "Review your domain" });
+  await screen.findByRole("heading", { name: "Check the price" });
 }
 
 describe("support dialog", () => {
@@ -185,9 +186,38 @@ describe("wizard flow", () => {
 
     await user.click(screen.getByRole("button", { name: "Pick a different domain" }));
 
-    await screen.findByRole("heading", { name: "Pick your domain" });
+    await screen.findByRole("heading", { name: "Choose your domain" });
     expect(calls.filter((call) => call.includes("/domains")).length).toBe(searches);
     expect((screen.getByLabelText(/achaar1\.com/) as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("premium domains", () => {
+  it("shows the one-time fee in the domain list and on the review screen", async () => {
+    const premium = { ...OFFER, name: "achaar1.com", fees: [PREMIUM_FEE] };
+    runs.r1 = makeRun({ state: "domains_listed", domains: [premium] });
+    window.location.hash = "#/run/r1/domain";
+    render(<App />);
+
+    await screen.findByText(/Premium domain: plus a one-time fee of \$3,900\.00/);
+
+    runs.r1 = makeRun({ state: "domain_chosen", domain: premium, domains: [premium] });
+    window.location.hash = "#/run/r1/review";
+    cleanup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Check the price" });
+    expect(screen.getByText(/plus a one-time fee of \$3,900\.00, charged when you buy/)).toBeTruthy();
+    expect(screen.getByText("$3,909.19")).toBeTruthy(); // 9.19 + 3,900.00
+  });
+
+  it("shows nothing extra for an ordinary domain", async () => {
+    runs.r1 = makeRun({ state: "domain_chosen", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/review";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Check the price" });
+    expect(screen.queryByText(/Premium domain/)).toBeNull();
+    expect(screen.queryByText(/Total first year/)).toBeNull();
   });
 });
 
@@ -286,7 +316,7 @@ describe("domain step business summary", () => {
     await user.type(screen.getByLabelText("Your idea"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
     await user.click(await screen.findByRole("button", { name: "Find domains" }));
-    await screen.findByRole("heading", { name: "Pick your domain" });
+    await screen.findByRole("heading", { name: "Choose your domain" });
   }
 
   it("shows the tagline and name ideas, with audience and tone folded away", async () => {
@@ -323,7 +353,7 @@ describe("stepper", () => {
     const nav = screen.getByRole("navigation", { name: "Progress" });
 
     await user.click(within(nav).getByRole("button", { name: /Domain/ }));
-    await screen.findByRole("heading", { name: "Pick your domain" });
+    await screen.findByRole("heading", { name: "Choose your domain" });
   });
 
   it("locks Domain and Review once the site is generated", async () => {
@@ -334,7 +364,7 @@ describe("stepper", () => {
     const nav = screen.getByRole("navigation", { name: "Progress" });
 
     expect(within(nav).queryByRole("button", { name: /Domain/ })).toBeNull();
-    expect(within(nav).queryByRole("button", { name: /Review/ })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: /Price/ })).toBeNull();
     expect(within(nav).getByRole("button", { name: /Idea/ })).toBeTruthy();
   });
 });
@@ -346,7 +376,7 @@ describe("resume and locking", () => {
 
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Review your domain" });
+    await screen.findByRole("heading", { name: "Check the price" });
   });
 
   it("sends a locked step in the URL to the step the run is at", async () => {
@@ -392,7 +422,7 @@ describe("logo", () => {
     await user.click(screen.getByRole("button", { name: "Shuru" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Keep working" }));
 
-    expect(screen.getByRole("heading", { name: "Review your domain" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Check the price" })).toBeTruthy();
     expect(window.location.hash).toBe("#/run/r1/review");
   });
 
@@ -415,6 +445,6 @@ describe("logo", () => {
 
     window.history.back();
 
-    await screen.findByRole("heading", { name: "Review your domain" });
+    await screen.findByRole("heading", { name: "Check the price" });
   });
 });

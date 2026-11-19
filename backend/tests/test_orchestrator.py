@@ -10,14 +10,7 @@ from app.core.errors import (
     RegenerationLimitError,
 )
 from app.models import Lang, RunState
-
-
-def prepare_site(orchestrator):
-    run = orchestrator.create_run("pickles", Lang.EN)
-    orchestrator.list_domains(run.id)
-    orchestrator.choose_domain(run.id, "achaar1.com")
-    orchestrator.generate_site(run.id, "achaar1.com", 12.0)
-    return run
+from tests.helpers import prepare_site
 
 
 def test_create_run_stores_brief(orchestrator):

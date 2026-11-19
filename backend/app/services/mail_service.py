@@ -30,6 +30,19 @@ class MailService:
     def configured(self) -> bool:
         return bool(self._user and self._password and self._to)
 
+    def _connect(self) -> smtplib.SMTP:
+        """Open a secure connection: implicit TLS on port 465, STARTTLS on any other port."""
+        context = ssl.create_default_context()
+        if self._port == 465:
+            return smtplib.SMTP_SSL(self._host, self._port, timeout=self._timeout, context=context)
+        smtp = smtplib.SMTP(self._host, self._port, timeout=self._timeout)
+        try:
+            smtp.starttls(context=context)
+        except Exception:
+            smtp.close()
+            raise
+        return smtp
+
     def send_contact(self, name: str, email: str, message: str) -> None:
         if not self.configured:
             logger.error("contact form used but SMTP is not configured (SHURU_SMTP_USER / SHURU_SMTP_PASSWORD)")
@@ -46,15 +59,9 @@ class MailService:
         mail.set_content(f"Name: {name}\nEmail: {email}\n\n{message}\n")
 
         try:
-            if self._port == 465:
-                with smtplib.SMTP_SSL(self._host, self._port, timeout=self._timeout, context=ssl.create_default_context()) as smtp:
-                    smtp.login(self._user, self._password)
-                    smtp.send_message(mail)
-            else:
-                with smtplib.SMTP(self._host, self._port, timeout=self._timeout) as smtp:
-                    smtp.starttls(context=ssl.create_default_context())
-                    smtp.login(self._user, self._password)
-                    smtp.send_message(mail)
+            with self._connect() as smtp:
+                smtp.login(self._user, self._password)
+                smtp.send_message(mail)
         except (smtplib.SMTPException, OSError, ValueError) as exc:
             # Log the type and server reply, never the credentials.
             logger.error("sending contact mail failed host=%s port=%s: %s: %s", self._host, self._port, type(exc).__name__, exc)

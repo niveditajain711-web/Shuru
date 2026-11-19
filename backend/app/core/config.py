@@ -25,9 +25,8 @@ class Settings(BaseSettings):
     claude_timeout_seconds: float = 60.0
 
     gddy_pat: SecretStr = Field(default=SecretStr(""), validation_alias="GDDY_PAT")
-    # Base URL for the read-only calls (suggest, availability). The GoDaddy test environment is the
-    # default. If it returns no suggestions, point this at production (`https://api.godaddy.com/v3/domains`):
-    # these calls cannot spend money.
+    # Base URL for the read-only calls (suggest, availability). Production by default: these calls cannot
+    # spend money, and the test environment (`https://api.ote-godaddy.com/v3/domains`) returned no suggestions.
     gddy_read_base_url: str = "https://api.godaddy.com/v3/domains"
     # Base URL for the quote and the registration. A quote token only works where it was issued, so both
     # use this one. Only `POST /registrations` here can spend money, and not while `demo_mode` is on.

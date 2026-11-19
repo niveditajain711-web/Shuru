@@ -1,13 +1,14 @@
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 
-from app.core.errors import GddyError
-from app.models import DomainOffer
-from app.clients.gddy_client import GddyClient
-
-BASE = "https://api.example.test/v3/domains"
+from app.clients.gddy_client import _to_amount, _to_offer, _to_quote
+from app.core.errors import DomainTakenError, GddyError
+from app.models import DomainOffer, PremiumFee
+from app.schemas import gddy
+from tests.helpers import QUOTE, make_client, make_locked_quote, respond
 
 # Shape taken from a real response of GET /v3/domains/suggestions.
 SUGGESTIONS = {
@@ -45,19 +46,35 @@ def one_year(value=919, currency="USD", renewal=1159):
             "renewalPrice": {"currencyCode": currency, "value": renewal}}
 
 
-def make_client(handler) -> tuple[GddyClient, list[httpx.Request]]:
-    requests: list[httpx.Request] = []
-
-    def record(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
-        return handler(request)
-
-    http = httpx.Client(transport=httpx.MockTransport(record))
-    return GddyClient(BASE + "/", "secret-pat", 5, http=http), requests
 
 
-def respond(body=None, status=200, headers=None):
-    return lambda request: httpx.Response(status, json=body, headers=headers)
+
+PREMIUM_FEE = {"type": "ONE_TIME_PREMIUM_DOMAIN_PURCHASE", "fee": {"currencyCode": "USD", "value": 390000}}
+
+
+def test_suggested_premium_domain_carries_its_fee():
+    premium = {"items": [{"domain": "premium.com", "prices": [{**one_year(), "fees": [PREMIUM_FEE]}]}]}
+    client, _ = make_client(respond(premium))
+
+    offer = client.suggest("premium", ["com"], 5)[0]
+
+    assert offer.fees == [PremiumFee(type="ONE_TIME_PREMIUM_DOMAIN_PURCHASE", currency="USD", value=390000, amount=3900.0)]
+    assert offer.price == 9.19  # the registration price alone; the fee is separate
+
+
+def test_ordinary_domains_have_no_fees():
+    client, _ = make_client(respond(SUGGESTIONS))
+
+    assert client.suggest("sunrisebakery", ["com"], 5)[0].fees == []
+
+
+def test_checked_premium_domain_carries_its_fee():
+    reply = availability(available=True, prices=[{**one_year(), "fees": [PREMIUM_FEE]}])
+    client, _ = make_client(respond(reply))
+
+    offer = client.check_availability("achaar.com")
+
+    assert offer.fees[0].amount == 3900.0
 
 
 def test_suggest_sends_a_bearer_request_and_converts_prices():
@@ -200,3 +217,115 @@ def test_unsafe_domain_is_rejected_before_sending(domain):
     with pytest.raises(GddyError):
         client.check_availability(domain)
     assert requests == []
+
+
+def test_quote_is_parsed_with_price_in_major_units():
+    client, requests = make_client(respond(QUOTE))
+
+    quote = client.quote_registration("achaar.com")
+
+    assert (quote.price, quote.renewal_price, quote.currency, quote.token) == (9.19, 11.59, "USD", "tok-1")
+    assert quote.agreements[0].type == "API_DPA"
+    assert json.loads(requests[0].content) == {"domain": "achaar.com", "period": 1}
+    assert requests[0].url.path == "/v3/domains/registration-quotes"
+
+
+def test_quote_keeps_premium_fees_verbatim():
+    premium = {**QUOTE, "fees": [{"type": "ONE_TIME_PREMIUM_DOMAIN_PURCHASE", "fee": {"currencyCode": "USD", "value": 390000}}]}
+    client, _ = make_client(respond(premium))
+
+    fee = client.quote_registration("achaar.com").fees[0]
+
+    assert (fee.value, fee.amount) == (390000, 3900.0)
+
+
+def test_unavailable_or_registered_domain_is_taken():
+    client, _ = make_client(respond({"domain": "achaar.com", "available": False}))
+    with pytest.raises(DomainTakenError):
+        client.quote_registration("achaar.com")
+
+    client, _ = make_client(respond({}, status=409))
+    with pytest.raises(DomainTakenError):
+        client.quote_registration("achaar.com")
+
+
+def test_incomplete_quote_is_an_error():
+    client, _ = make_client(respond({**QUOTE, "requiredAgreements": []}))
+
+    with pytest.raises(GddyError):
+        client.quote_registration("achaar.com")
+
+
+def test_register_sends_token_consent_and_idempotency_key():
+    client, requests = make_client(respond({"registrationId": "reg-9", "status": "CONFIRMED"}, status=202))
+    agreed_at = datetime(2030, 1, 1, 10, 0, tzinfo=UTC)
+
+    result = client.register(make_locked_quote(), agreed_at)
+
+    assert result == ("reg-9", "CONFIRMED")
+    request = requests[0]
+    assert request.method == "POST" and request.url.path == "/v3/domains/registrations"
+    assert request.headers["Idempotency-Key"] == "key-1"
+    assert json.loads(request.content) == {
+        "quoteToken": "tok-1",
+        "domain": "achaar.com",
+        "period": 1,
+        "consent": {"agreedAt": "2030-01-01T10:00:00Z", "agreementTypes": ["API_DPA"]},
+    }
+
+
+def test_register_echoes_acknowledged_fees_verbatim():
+    client, requests = make_client(respond({"registrationId": "r", "status": "CONFIRMED"}, status=202))
+    fee = PremiumFee(type="ONE_TIME_PREMIUM_DOMAIN_PURCHASE", currency="USD", value=390000, amount=3900.0)
+
+    client.register(make_locked_quote(fees=[fee]), datetime.now(UTC))
+
+    consent = json.loads(requests[0].content)["consent"]
+    assert consent["acknowledgedFees"] == [
+        {"type": "ONE_TIME_PREMIUM_DOMAIN_PURCHASE", "fee": {"currencyCode": "USD", "value": 390000}}
+    ]
+
+
+def test_get_registration_reads_status():
+    client, requests = make_client(respond({"registrationId": "reg-9", "status": "COMPLETED", "expiresAt": "2031-01-01T00:00:00Z"}))
+
+    status, expires_at = client.get_registration("reg-9")
+
+    assert status == "COMPLETED" and expires_at.year == 2031
+    assert requests[0].url.path == "/v3/domains/registrations/reg-9"
+
+
+def test_registration_id_is_validated_before_it_goes_in_a_path():
+    client, requests = make_client(respond({}))
+
+    with pytest.raises(GddyError):
+        client.get_registration("../domain-names")
+
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    ("currency", "value", "expected"),
+    [("USD", 919, 9.19), ("JPY", 1000, 1000.0), ("KWD", 12345, 12.345), ("usd", 5, 0.05)],
+)
+def test_amounts_use_the_currencys_decimals(currency, value, expected):
+    assert _to_amount(gddy.Money(currencyCode=currency, value=value)) == expected
+
+
+def test_offer_needs_a_one_year_price_and_a_valid_name():
+    two_years = gddy.TermPrice(term="YEAR", period=2, price=gddy.Money(currencyCode="USD", value=100))
+
+    assert _to_offer("achaar.com", [two_years]) is None
+    assert _to_offer("achaar.com", []) is None
+
+
+def parsed_quote(**changes):
+    return gddy.RegistrationQuote.model_validate({**QUOTE, **changes})
+
+
+def test_quote_mapping_rejects_incomplete_or_different_quotes():
+    assert _to_quote(parsed_quote(), "achaar.com", 1) is not None
+    assert _to_quote(parsed_quote(quoteToken=None), "achaar.com", 1) is None
+    assert _to_quote(parsed_quote(price=None), "achaar.com", 1) is None
+    assert _to_quote(parsed_quote(), "other.com", 1) is None
+    assert _to_quote(parsed_quote(period=2), "achaar.com", 1) is None

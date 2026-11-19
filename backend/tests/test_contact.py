@@ -1,11 +1,13 @@
 import smtplib
+from typing import ClassVar
+
+import pytest
 
 from app.core.config import Settings
 from app.core.errors import MailError, MailNotConfiguredError
-from app.utils.rate_limit import RateLimiter
 from app.services import mail_service
 from app.services.mail_service import MailService
-import pytest
+from app.utils.rate_limit import RateLimiter
 
 VALID = {"name": "Asha", "email": "asha@example.com", "message": "Hello there"}
 
@@ -63,7 +65,7 @@ def test_rate_limiter_window():
 
 
 class FakeSMTP:
-    instances: list["FakeSMTP"] = []
+    instances: ClassVar[list["FakeSMTP"]] = []
     fail_login = False
 
     def __init__(self, host, port, timeout=None, context=None):
@@ -127,3 +129,22 @@ def test_unconfigured_mail_service(smtp):
     with pytest.raises(MailNotConfiguredError):
         MailService(Settings(_env_file=None)).send_contact("Asha", "asha@example.com", "Hi")
     assert smtp.instances == []
+
+
+def test_starttls_failure_closes_the_connection(monkeypatch):
+    closed = []
+
+    class BrokenStartTls(FakeSMTP):
+        def starttls(self, context=None):
+            raise smtplib.SMTPException("no tls")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(mail_service.smtplib, "SMTP", BrokenStartTls)
+    service = MailService(Settings(smtp_user="a@b.test", smtp_password="pw", smtp_port=587))
+
+    with pytest.raises(MailError):
+        service.send_contact("Asha", "asha@example.com", "hello")
+
+    assert closed == [True]

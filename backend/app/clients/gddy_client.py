@@ -1,7 +1,6 @@
 import logging
 import re
 import time
-import uuid
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
@@ -10,7 +9,8 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from app.core.errors import DomainTakenError, GddyError
-from app.models import DOMAIN_LABEL_PATTERN, DOMAIN_PATTERN, Agreement, DomainOffer, Quote, QuoteFee
+from app.models import DOMAIN_LABEL_PATTERN, DOMAIN_PATTERN, Agreement, DomainOffer, LockedQuote, PremiumFee
+from app.schemas import gddy
 
 logger = logging.getLogger(__name__)
 
@@ -21,78 +21,6 @@ _RETRY_AFTER_CAP_SECONDS = 3.0
 # ISO-4217 minor units. Anything not listed has 2 decimals.
 _ZERO_DECIMAL = {"BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"}
 _THREE_DECIMAL = {"BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"}
-
-
-class _Money(BaseModel):
-    currencyCode: str
-    value: int
-
-
-class _TermPrice(BaseModel):
-    term: str
-    period: int
-    price: _Money
-    renewalPrice: _Money | None = None
-
-
-class _Suggestion(BaseModel):
-    domain: str
-    prices: list[_TermPrice] = []
-
-
-class _Suggestions(BaseModel):
-    items: list[_Suggestion]
-
-
-class _Availability(BaseModel):
-    domain: str
-    available: bool | None = None
-    prices: list[_TermPrice] = []
-    error: dict | None = None
-
-
-class _Availabilities(BaseModel):
-    items: list[_Availability]
-
-
-class _Fee(BaseModel):
-    type: str
-    fee: _Money
-
-
-class _Agreement(BaseModel):
-    agreementType: str
-    title: str
-    url: str | None = None
-
-
-class _QuoteItem(BaseModel):
-    domain: str | None = None
-    period: int | None = None
-    price: _Money | None = None
-    renewalPrice: _Money | None = None
-    fees: list[_Fee] = []
-
-
-class _RegistrationQuote(BaseModel):
-    """Per the OpenAPI spec the price is at the top level. The guide's sample nests it in `items`; both are read."""
-
-    domain: str
-    available: bool
-    quoteToken: str | None = None
-    expiresAt: datetime | None = None
-    period: int | None = None
-    price: _Money | None = None
-    renewalPrice: _Money | None = None
-    fees: list[_Fee] = []
-    requiredAgreements: list[_Agreement] = []
-    items: list[_QuoteItem] = []
-
-
-class _Registration(BaseModel):
-    registrationId: str
-    status: str
-    expiresAt: datetime | None = None
 
 
 class GddyClient:
@@ -113,7 +41,7 @@ class GddyClient:
         _require(len(query) <= _MAX_QUERY_LENGTH and re.fullmatch(DOMAIN_LABEL_PATTERN, query), "query")
         _require(0 < limit <= _MAX_PAGE_SIZE, "limit")
         body = self._send("GET", "/suggestions", params={"query": query, "tlds": ",".join(tlds), "pageSize": limit})
-        parsed = _parse(_Suggestions, body, "suggestions")
+        parsed = _parse(gddy.Suggestions, body, "suggestions")
 
         offers = []
         for item in parsed.items:
@@ -128,7 +56,7 @@ class GddyClient:
         """Check one domain against the registry. Returns it with its price, or None if not available."""
         _require(re.fullmatch(DOMAIN_PATTERN, domain), "domain")
         body = self._send("POST", "/check-availability", json={"domains": [domain], "optimizeFor": "ACCURACY"})
-        parsed = _parse(_Availabilities, body, "availability")
+        parsed = _parse(gddy.Availabilities, body, "availability")
         if len(parsed.items) != 1:
             logger.error("gddy availability returned %d items for 1 domain", len(parsed.items))
             raise GddyError()
@@ -145,45 +73,25 @@ class GddyClient:
             raise GddyError()
         return offer
 
-    def quote_registration(self, domain: str, period: int = 1) -> Quote:
+    def quote_registration(self, domain: str, period: int = 1) -> LockedQuote:
         """Lock the price of registering one domain. Free and read-only.
 
-        Raises DomainTakenError if the domain cannot be registered. The returned quote carries the
-        token and a fresh idempotency key for the registration that will use it.
+        Raises DomainTakenError if the domain cannot be registered.
         """
         _require(re.fullmatch(DOMAIN_PATTERN, domain) and 1 <= period <= 10, "domain")
-        body = self._send("POST", "/registration-quotes", json={"domain": domain, "period": period})
-        parsed = _parse(_RegistrationQuote, body, "registration quote")
+        body = self._send(
+            "POST", "/registration-quotes", conflict_means_taken=True, json={"domain": domain, "period": period}
+        )
+        parsed = _parse(gddy.RegistrationQuote, body, "registration quote")
         if not parsed.available:
             raise DomainTakenError()
-
-        item = parsed.items[0] if parsed.items else _QuoteItem()
-        price = parsed.price or item.price
-        fees = parsed.fees or item.fees
-        renewal = parsed.renewalPrice or item.renewalPrice
-        if price is None or parsed.quoteToken is None or parsed.expiresAt is None or not parsed.requiredAgreements:
-            logger.error("gddy quote is missing price, token, expiry or agreements domain=%s", domain)
+        quote = _to_quote(parsed, domain, period)
+        if quote is None:
+            logger.error("gddy quote is incomplete or does not match the request domain=%s", domain)
             raise GddyError()
-        if parsed.domain != domain or (parsed.period or item.period or period) != period:
-            logger.error("gddy quote does not match the request domain=%s quoted=%s", domain, parsed.domain)
-            raise GddyError()
-        return Quote(
-            domain=domain,
-            period=period,
-            price=_to_amount(price),
-            renewal_price=_to_amount(renewal) if renewal and renewal.currencyCode == price.currencyCode else None,
-            currency=price.currencyCode,
-            fees=[
-                QuoteFee(type=f.type, currency=f.fee.currencyCode, value=f.fee.value, amount=_to_amount(f.fee))
-                for f in fees
-            ],
-            agreements=[Agreement(type=a.agreementType, title=a.title, url=a.url) for a in parsed.requiredAgreements],
-            expires_at=parsed.expiresAt,
-            token=parsed.quoteToken,
-            idempotency_key=str(uuid.uuid4()),
-        )
+        return quote
 
-    def register(self, quote: Quote, agreed_at: datetime) -> tuple[str, str]:
+    def register(self, quote: LockedQuote, agreed_at: datetime) -> tuple[str, str]:
         """Register the quoted domain. THIS CHARGES THE ACCOUNT and cannot be undone.
 
         Sends the quote's idempotency key, so repeating the call for the same quote (after a timeout,
@@ -201,19 +109,27 @@ class GddyClient:
             "POST",
             "/registrations",
             headers={"Idempotency-Key": quote.idempotency_key},
+            conflict_means_taken=True,
             json={"quoteToken": quote.token, "domain": quote.domain, "period": quote.period, "consent": consent},
         )
-        parsed = _parse(_Registration, body, "registration")
+        parsed = _parse(gddy.Registration, body, "registration")
         logger.info("gddy registration accepted domain=%s registration_id=%s status=%s", quote.domain, parsed.registrationId, parsed.status)
         return parsed.registrationId, parsed.status
 
     def get_registration(self, registration_id: str) -> tuple[str, datetime | None]:
         """Return the registration's status and, once completed, when the domain expires."""
         _require(re.fullmatch(r"[A-Za-z0-9_-]+", registration_id), "registration id")
-        parsed = _parse(_Registration, self._send("GET", f"/registrations/{registration_id}"), "registration")
+        parsed = _parse(gddy.Registration, self._send("GET", f"/registrations/{registration_id}"), "registration")
         return parsed.status, parsed.expiresAt
 
-    def _send(self, method: str, path: str, headers: dict[str, str] | None = None, **kwargs: object) -> object:
+    def _send(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        conflict_means_taken: bool = False,
+        **kwargs: object,
+    ) -> object:
         url = f"{self._base_url}{path}"
         all_headers = {**self._headers, **(headers or {})}
         started = time.monotonic()
@@ -236,7 +152,7 @@ class GddyClient:
             time.monotonic() - started,
             response.headers.get("X-Request-Id"),
         )
-        if response.status_code == 409 and path in ("/registration-quotes", "/registrations"):
+        if response.status_code == 409 and conflict_means_taken:
             logger.info("gddy domain is already registered path=%s", path)
             raise DomainTakenError()
         if response.status_code >= 400:
@@ -264,7 +180,7 @@ def _parse[M: BaseModel](model: type[M], body: object, what: str) -> M:
         raise GddyError() from exc
 
 
-def _to_offer(domain: str, prices: list[_TermPrice]) -> DomainOffer | None:
+def _to_offer(domain: str, prices: list[gddy.TermPrice]) -> DomainOffer | None:
     """Build an offer from the 1-year price. Returns None if there is none or the name is invalid."""
     one_year = next((p for p in prices if p.term == "YEAR" and p.period == 1), None)
     if one_year is None or not re.fullmatch(DOMAIN_PATTERN, domain):
@@ -276,10 +192,36 @@ def _to_offer(domain: str, prices: list[_TermPrice]) -> DomainOffer | None:
         price=_to_amount(one_year.price),
         renewal_price=_to_amount(renewal) if renewal and renewal.currencyCode == currency else None,
         currency=currency,
+        fees=[_to_fee(f) for f in one_year.fees],
     )
 
 
-def _to_amount(money: _Money) -> float:
+def _to_quote(parsed: gddy.RegistrationQuote, domain: str, period: int) -> LockedQuote | None:
+    """Build our quote from GoDaddy's. Returns None if it lacks what a purchase needs or is for something else."""
+    price, renewal = parsed.price, parsed.renewalPrice
+    if price is None or parsed.quoteToken is None or parsed.expiresAt is None or not parsed.requiredAgreements:
+        return None
+    if parsed.domain != domain or (parsed.period or period) != period:
+        return None
+    return LockedQuote(
+        domain=domain,
+        period=period,
+        price=_to_amount(price),
+        renewal_price=_to_amount(renewal) if renewal and renewal.currencyCode == price.currencyCode else None,
+        currency=price.currencyCode,
+        # Premium-domain fees, kept exactly as quoted: they are echoed back verbatim when the user buys.
+        fees=[_to_fee(f) for f in parsed.fees],
+        agreements=[Agreement(type=a.agreementType, title=a.title, url=a.url) for a in parsed.requiredAgreements],
+        expires_at=parsed.expiresAt,
+        token=parsed.quoteToken,
+    )
+
+
+def _to_fee(fee: gddy.Fee) -> PremiumFee:
+    return PremiumFee(type=fee.type, currency=fee.fee.currencyCode, value=fee.fee.value, amount=_to_amount(fee.fee))
+
+
+def _to_amount(money: gddy.Money) -> float:
     """Convert the API's integer minor units (`919` USD is 9.19) using the currency's decimals."""
     code = money.currencyCode.upper()
     decimals = 0 if code in _ZERO_DECIMAL else 3 if code in _THREE_DECIMAL else 2

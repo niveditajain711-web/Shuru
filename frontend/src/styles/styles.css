@@ -1036,3 +1036,12 @@ button.link:hover:not(:disabled) {
   height: 1.25rem;
   margin-top: 0.15rem;
 }
+
+.hint.premium {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.summary-total {
+  font-size: 1.15rem;
+}

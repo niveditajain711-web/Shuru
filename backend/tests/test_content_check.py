@@ -2,7 +2,7 @@ import pytest
 
 from app.models import SiteContent
 from app.services.content_check import find_problems
-from tests.conftest import make_brief, make_site
+from tests.helpers import make_brief, make_site
 
 
 def site_with_headline(text: str) -> SiteContent:

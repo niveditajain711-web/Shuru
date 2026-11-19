@@ -67,7 +67,7 @@ Shuru has three external dependencies: the **Anthropic API**, the **GoDaddy Doma
 | 10 | Connect DNS | Backend (GoDaddy REST) | none | domain resolves to the site |
 | 11 | **Claude call #3** (launch kit) | Backend | low | 5 social posts, welcome email, 30-day checklist |
 
-The wizard shows these screens: **Idea, Domain, Review cost, Preview, Buy** (built), and a launch screen later. Step 8 runs from the Buy screen. Steps 9 to 11 will run after the Approve gate and the same screen will poll for progress.
+The wizard shows these screens: **Idea, Domain, Price, Site, Buy** (built), and a launch screen later. Step 8 runs from the Buy screen. Steps 9 to 11 will run after the Approve gate and the same screen will poll for progress.
 
 ### 3.1 Language: native generation
 
@@ -82,15 +82,15 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 
 ### 4.1 Frontend (React + Vite)
 
-- Wizard with a **stepper** (Idea, Domain, Review, Preview, Buy; a sixth step, Launch, is added with hosting) that shows done, current and upcoming steps. Finished steps that are still open are clickable; the rest are disabled with a plain-language hint. On narrow screens only the current step keeps its label, with "Step N of 5" above.
+- Wizard with a **stepper** (Idea, Domain, Price, Site, Buy; a sixth step, Launch, is added with hosting) that shows done, current and upcoming steps. Finished steps that are still open are clickable; the rest are disabled with a plain-language hint. On narrow screens only the current step keeps its label, with "Step N of 5" above.
 - **Navigation lives in the URL hash** (`#/run/{id}/{step}`), with no router library. On load, refresh or browser Back, the frontend fetches the run with `GET /runs/{id}` and opens the step the run's state allows. A step that is locked or not reached yet is replaced in the URL by the step the run is at. The frontend holds only UI state; the run itself is the backend's.
-- Step rules mirror the backend state machine: Domain is open until the site is generated, Review only while a domain is chosen, Preview and Buy only once the site exists. **Once the site is generated, Domain and Review are locked** (the backend does not allow changing the domain), so Preview offers "Buy domain" and "Start over". A run in `purchasing` or `purchased` waits at Buy, and **once the purchase has started every earlier step (Idea included) is locked**: only Buy is open, with "Start a new site" as the only action. The backend enforces it too, since every earlier endpoint accepts only earlier states.
+- Step rules mirror the backend state machine: Domain is open until the site is generated, Price (step id `review`) only while a domain is chosen, Site (step id `preview`) and Buy only once the site exists. **Once the site is generated, Domain and Review are locked** (the backend does not allow changing the domain), so Preview offers "Buy domain" and "Start over". A run in `purchasing` or `purchased` waits at Buy, and **once the purchase has started every earlier step (Idea included) is locked**: only Buy is open, with "Start a new site" as the only action. The backend enforces it too, since every earlier endpoint accepts only earlier states.
 - **The Shuru logo starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
 - Domain results come from the run (`run.domains`), so returning to the Domain step does not repeat the external search. The Domain step shows a compact business reminder (tagline, name-idea chips, folded details); tapping a chip runs the same keyword search as typing it.
 - Preview: the server-rendered site HTML in a sandboxed iframe, with an English/Hindi toggle and "Regenerate (N of 3 left)".
 - **Brand and styling:** one stylesheet with design tokens (spacing, type scale, colours) and primary, secondary and subtle button variants. The logo is an inline SVG component (green tile with a "start" arrow, the wordmark, a turmeric dot and "शुरू"), so there are no image assets; it is still a real button that starts a fresh run, and its decorative parts are hidden from screen readers. The palette is green plus one turmeric accent (`#E9A23B`) used only for fills and rings, never for text on white. Secondary text is at least 8:1 contrast and placeholders about 5.8:1. Dark mode is out of scope for now.
 - Loading states (spinner and skeletons) announce themselves to screen readers; each new screen moves focus to its heading and updates the page title.
-- Review-cost screen (after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
+- Price screen (headed "Check the price"; after choosing a domain) shows the domain, first-year price, renewal price and a "taxes and fees not included" note. "Confirm and build my site" is the only way to start Claude call #2; "Pick a different domain" goes back. This is a confirmation of intent, not a purchase.
 - **Buy screen** (`CheckoutStep`, built) opens from Preview. On opening it asks for a quote (`POST /runs/{id}/quote`) unless the stored one is still locked, then shows the domain, quoted price, premium fees, renewal price, lock expiry and the "excludes ICANN fees and taxes" note, plus a note if the price changed since cost review. The agreement links come from the quote. The buy button stays disabled until the user ticks "I have read and agree" (and the fee tick for a premium domain). It sends only what the user accepted (`agreement_types`, `price`, `acknowledged_fees`) to `POST /runs/{id}/purchase`; the backend decides what is valid. Three views: the quote and consent, a pending view ("Check status" calls `POST /runs/{id}/purchase/refresh`), and the confirmation, which also shows the generated site (the `GET /runs/{id}/preview` HTML in a sandboxed iframe with an English/Hindi switch, plus an "Open your site in a new tab" link to the same URL) and says that publishing on the domain comes later. When the quote says `demo`, a notice states that nothing is registered or charged, the button reads "Complete demo purchase", and the confirmation says "(not charged)".
 - The planned Approve screen (later) extends this to cover hosting, DNS and the launch kit.
 - **Support modal** (`SupportDialog`, native `<dialog>` with `showModal()` for focus trap, Esc and focus return) opened from a quiet **Support** link in the header; it wraps `ContactForm`. Wizard state lives in `App`, so opening or closing the modal does not touch it. The form posts to `POST /contact`, shows a thank-you or a plain error, and keeps the typed text on failure. It includes a hidden honeypot field. No mail credentials exist in the browser.
@@ -98,16 +98,16 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 
 ### 4.2 Backend (Python + FastAPI)
 
-Thin HTTP layer (`routes/`) over a set of services. One endpoint per step, all keyed by `run_id`. Folder responsibilities are in section 12: `core/` (settings, errors, logging), `models/`, `routes/`, `services/`, `clients/` (external APIs), `repositories/` (SQLite) and `utils/`.
+Thin HTTP layer (`routes/`) over a set of services. One endpoint per step, all keyed by `run_id`. Folder responsibilities are in section 12: `core/` (settings, errors, logging), `models/` (what we store), `schemas/` (what crosses a boundary: request bodies and GoDaddy's raw JSON), `routes/`, `services/`, `clients/` (external APIs), `repositories/` (SQLite) and `utils/`.
 
 | Service | Responsibility |
 | --- | --- |
 | `claude_service` | The generator Claude calls (brief, site, launch kit). Prompts, model choice, `max_tokens`, prompt caching, Pydantic validation, one retry on invalid JSON. |
 | `domain_scout` (planned) | The scout agent: a Claude tool-use loop over a read-only tool allowlist (`suggest_domains`, `check_availability`, both through `domain_service`). Enforces the step cap, token budget, deadline and price ceiling; records the trace on the run; falls back to the fixed search on failure. |
 | `name_safety` (planned) | Deny list of famous brands plus the per-name flags from Claude; decides drop, warn or keep. |
-| `gddy_client` (in `clients/`) | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses, converts minor-unit prices, maps errors to typed exceptions (a 409 on quote or registration becomes "domain taken"). Also `quote_registration`, `register` (sends the `Idempotency-Key`; the only call that spends money) and `get_registration`. Only module that calls GoDaddy. |
+| `gddy_client` (in `clients/`) | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses into the `schemas/gddy.py` shapes and converts them (with minor-unit prices) into our models, maps errors to typed exceptions (a 409 on quote or registration becomes "domain taken"). The read and purchase clients share one `httpx` connection pool, closed when the app shuts down. Also `quote_registration`, `register` (sends the `Idempotency-Key`; the only call that spends money) and `get_registration`. Only module that calls GoDaddy. |
 | `domain_service` | Suggest and availability (read-only). The chosen domain is re-checked once; the quote is the authoritative check. |
-| `purchase_service` | Quote and purchase. Always asks GoDaddy for a real quote. In demo mode `buy` records a completed demo purchase and never calls `register`; otherwise it registers and polls (default up to 30 s) until `COMPLETED`, `FAILED` or still pending. `refresh` checks on a pending purchase and never registers. Uses its own `GddyClient` on `SHURU_GDDY_PURCHASE_BASE_URL`. |
+| `purchase_service` | Quote and purchase. Always asks GoDaddy for a real quote and gives it a fresh idempotency key. `check_acceptance` is where the purchase rules live (quote still locked, agreements and price match, premium fees acknowledged); the orchestrator only sequences. In demo mode `buy` records a completed demo purchase and never calls `register`; otherwise it registers and polls (default up to 30 s) until `COMPLETED`, `FAILED` or still pending. `refresh` checks on a pending purchase and never registers. Uses its own `GddyClient` on `SHURU_GDDY_PURCHASE_BASE_URL`. |
 | `site_service` | Renders content JSON through the fixed template to static HTML. |
 | `mail_service` | Sends contact-form messages over SMTP (`smtplib`) to the Shuru mailbox. Implicit TLS on port 465, STARTTLS otherwise. Only module that talks SMTP; takes credentials from settings only. |
 | `packager` | Wraps the HTML in a minimal Node.js app and zips it to the publishing target's requirements. |
@@ -115,7 +115,7 @@ Thin HTTP layer (`routes/`) over a set of services. One endpoint per step, all k
 | `dns_service` | Adds the DNS records that point the domain at the published site. |
 | `run_store` (in `repositories/`) | Persists run state and results in SQLite (stdlib `sqlite3`, one file, WAL mode). |
 | `orchestrator` | The fixed state machine that sequences the services and agent steps and enforces the approval gates (section 5). |
-| `rate_limit` (in `utils/`) | In-memory per-client sliding-window limits: run creation (10 per hour) and contact (5 per hour). |
+| `rate_limit` (in `utils/`) | In-memory per-client sliding-window limits: run creation (10 per hour) and contact (5 per hour). Clients with no hits left in the window are forgotten, so memory does not grow with every address ever seen. |
 
 ### 4.3 Claude usage
 
@@ -195,13 +195,13 @@ Progress is delivered by **polling**, not SSE. The browser calls `GET /runs/{id}
 **Built (the Buy step).**
 
 1. Nothing before the Buy step can spend money. `purchase` runs only from `SITE_GENERATED`, and only with a stored quote.
-2. The user's request carries exactly what they accepted: the agreement types, the quoted price and, for a premium domain, the fee acknowledgement. The backend refuses (409 `confirmation_mismatch`) unless the agreements equal the quote's `requiredAgreements`, the price equals the quote's price, and the fees were acknowledged when the quote has any. This is a server-side check, not only the UI.
+2. The user's request carries exactly what they accepted: the agreement types, the quoted price and, for a premium domain, the fee acknowledgement. `PurchaseService.check_acceptance` refuses (409 `confirmation_mismatch`) unless the agreements equal the quote's `requiredAgreements`, the price equals the quote's price, and the fees were acknowledged when the quote has any. This is a server-side check, not only the UI.
 3. The quote must still be locked (`expires_at` in the future), else 409 `quote_expired` and the screen asks for a new one. Quote tokens last about 10 minutes and are single use.
 4. **Demo mode** (`SHURU_DEMO_MODE`, default `true`): `PurchaseService.buy` returns a completed purchase marked `demo` without calling `POST /registrations`. A warning is logged at startup and on each demo purchase. Real purchases need `SHURU_DEMO_MODE=false`, and a startup warning says so. The quote itself is always real (it is free and read-only), so demo mode needs a payment method and registrant contact on the account.
 5. Real purchase: `POST /registrations` with the `quoteToken`, `domain`, `period` and `consent` (`agreementTypes`, `agreedAt`, and `acknowledgedFees` copied verbatim from the quote). It returns 202. The backend polls the registration (default every 2 s for up to 30 s). `COMPLETED` gives `PURCHASED`; `FAILED` raises a plain error, drops the spent quote and leaves the run at `SITE_GENERATED`; still running leaves the run `PURCHASING` and the user can press Check status.
 6. **No double buying.** Each quote gets a UUID `idempotency_key`, saved with it and sent as `Idempotency-Key`, so a retry after a timeout replays the same operation. A repeated purchase click cannot start a second registration because the state is no longer `SITE_GENERATED`. `refresh` only reads.
 7. **Consent time.** `agreedAt` is the server's time when the accept request arrives, which is the moment of the click. It is never invented earlier or later.
-8. The quote token and idempotency key are stored with the run but excluded from every API response.
+8. The quote token and idempotency key live on `LockedQuote`, which is stored with the run. Every route returns `schemas.RunResponse`, whose `quote` is the public `Quote` without them, so no route can leak them.
 
 **Known limit.** There are no user accounts, so anyone holding a run's id can confirm a real purchase. Demo mode stays on until accounts or the Approve gate exist.
 
@@ -234,7 +234,7 @@ The backend calls the **GoDaddy Domain Lifecycle Management API v3** over HTTPS 
 | --- | --- |
 | Suggest | `GET /suggestions?query=&tlds=&pageSize=` returns `{items: [{domain, inventory, prices[]}]}`; available-only, indicative prices |
 | Check | `POST /check-availability` with `{domains: [1..25], optimizeFor: SPEED or ACCURACY}`; per-item `available` or `error` |
-| Quote (built) | `POST /registration-quotes` with `{domain, period}` returns `quoteToken`, `expiresAt`, `price`, `renewalPrice`, `fees` (premium only) and `requiredAgreements`, locked for 10 minutes. `available: false` means no token (shown as "domain taken"). The OpenAPI spec puts the price at the top level; the guide's sample nests it under `items`, and the client reads both |
+| Quote (built) | `POST /registration-quotes` with `{domain, period}` returns `quoteToken`, `expiresAt`, `price`, `renewalPrice`, `fees` (premium only) and `requiredAgreements`, locked for 10 minutes. `available: false` means no token (shown as "domain taken"). The reply has the spec's flat shape (checked against a real reply for `lucknowachaar.net`: `available`, `domain`, `expiresAt`, `inventory`, `irreversible`, `period`, `price`, `quoteToken`, `renewalPrice`, `requiredAgreements`, `resolved`). `fees` is absent for ordinary domains and, for a premium domain, is a top-level array of `{type, fee:{currencyCode, value}}`. The guide's sample, which nests the price under `items`, does not match the API and is not read |
 | Purchase (built; skipped in demo mode) | `POST /registrations` with the `quoteToken`, `consent` and an `Idempotency-Key`; 202, then poll `GET /registrations/{id}` until `COMPLETED` or `FAILED` |
 | DNS (later) | `/zones/{zone}/dns-records` (list, create, replace, delete) |
 | Hosting (later) | Not in this API; see 4.4 |
@@ -243,7 +243,7 @@ Integration rules:
 
 - **Auth:** a Personal Access Token sent as `Authorization: Bearer <PAT>`, read from `GDDY_PAT` in `backend/.env` by the settings layer. It is never logged or sent to the client.
 - **Environments:** read-only calls (suggest, check) and money-moving calls (quote, purchase) have **separate configurable base URLs**: `SHURU_GDDY_READ_BASE_URL` and `SHURU_GDDY_PURCHASE_BASE_URL`. The test environment is `https://api.ote-godaddy.com`; production is `https://api.godaddy.com`. The OTE environment returned an empty body for `/suggestions` when tried, so read-only calls point at production (they cannot spend money). Both settings default to production today. A quote token works only where it was issued, so quote and registration share the purchase URL. The active base URLs and the demo-mode state are logged at startup.
-- **Prices:** `price.value` is an integer in minor units (for USD, `919` is $9.19), converted with the currency's ISO-4217 decimals. The 1-year entry (`period == 1`) is used, with `renewalPrice` kept alongside it. Prices exclude taxes and fees and are indicative until a quote.
+- **Prices:** `price.value` is an integer in minor units (for USD, `919` is $9.19), converted with the currency's ISO-4217 decimals. The 1-year entry (`period == 1`) is used, with `renewalPrice` and the entry's premium `fees` kept alongside it. A premium (aftermarket) domain carries a one-time fee on top of the registration price; it is returned on `DomainOffer.fees` (empty for ordinary domains), shown on the domain card and the review screen (where a total of price plus fees is also shown), and shown again, with the required acknowledgement, at the Buy step. Prices exclude ICANN fees and taxes and are indicative until a quote.
 - **Errors:** responses carry `{name, correlationId, message}` and an `X-Request-Id` header; the correlation id is logged. 401/403 (bad token), 429 (retry once with backoff), timeouts and malformed bodies become a typed `GddyError`. Per-domain check errors (`UNSUPPORTED_TLD`, `INVALID_DOMAIN`, `MISMATCH_FORMAT`) are treated as "not available".
 - **Availability policy:** suggestions are trusted as available. One `ACCURACY` check runs on the domain the user chooses. The authoritative check is the quote.
 - **Prerequisites on the account:** payment method, registrant contacts, and a hosting plan if using GoDaddy Hosting. The v3 quote resolves the payment method and registrant from the account profile; if they are missing the quote fails (422), which the user sees as a generic domain-service error with the detail in the logs, in demo mode too.
@@ -259,7 +259,8 @@ Minimal, stored in a single SQLite database:
 | `Brief` | `run_id`, JSON payload |
 | `DomainCandidate` | `run_id`, `domain`, `price`, `renewal_price`, `currency`, `chosen`, `reason`, `safety_flag` |
 | `AgentTrace` | `run_id`, `step`, tool name, input, result summary, timestamp |
-| `Quote` (built; stored on the run) | `domain`, `period`, `price`, `renewal_price`, `currency`, `fees[]`, `agreements[]`, `expires_at`, `demo`, plus the secret `token` and `idempotency_key` |
+| `Quote` (built; shown to the user) | `domain`, `period`, `price`, `renewal_price`, `currency`, `fees[]`, `agreements[]`, `expires_at`, `demo` |
+| `LockedQuote` (built; stored on the run) | a `Quote` plus the secret `token` and `idempotency_key` |
 | `Purchase` (built; stored on the run) | `domain`, `status` (`pending` or `completed`), `demo`, `price`, `currency`, `registration_id`, `agreed_at`, `expires_at` |
 | `SiteContent` | `run_id`, JSON payload, `template_version` |
 | `Deployment` | `run_id`, `publisher`, `live_url`, `operation_ids`, `status` |
@@ -337,9 +338,11 @@ shuru/
     app/
       main.py            # FastAPI app factory, wiring, error handlers
       core/              # config.py (Settings), errors.py (typed errors), logging.py
-      models/            # Pydantic models: common.py (types, enums), site.py (Claude output, domains),
-                         #   run.py (Run + run requests), purchase.py (Quote, Purchase, PurchaseRequest),
-                         #   contact.py (contact request/response)
+      models/            # What we store and reason about: common.py (types, enums), domain.py (DomainOffer, PremiumFee),
+                         #   site.py (Brief, SiteContent: Claude output), purchase.py (Quote, Purchase), run.py (Run)
+      schemas/           # What crosses a boundary: requests.py (HTTP request bodies), responses.py (RunResponse,
+                         #   which hides the quote's secrets), contact.py (contact
+                         #   request/response), gddy.py (GoDaddy's raw JSON). Schemas may import models, never the reverse
       routes/            # HTTP layer, mounted under /api: runs.py, contact.py, deps.py (dependencies)
       services/
         orchestrator.py  # state machine
@@ -379,7 +382,7 @@ shuru/
 
 - Unit tests for each service with mocked GoDaddy HTTP responses (recorded from real calls) and a fake Claude client.
 - Contract tests for Claude output models using recorded fixtures.
-- State machine tests, including "purchase cannot run without approval" and "purchase cannot run twice". Built: `tests/test_purchase.py` covers demo mode never calling `register`, the quote token staying out of responses, mismatched agreements or price, premium fee acknowledgement, expired quotes, pending purchases being checked and not repeated, failed registrations discarding the quote, the store migration, and the GoDaddy client's quote, registration (token, consent, idempotency key, fees verbatim) and status calls, all against fake GoDaddy responses.
+- State machine tests, including "purchase cannot run without approval" and "purchase cannot run twice". Built: `tests/test_purchase_flow.py` (demo mode never calling `register`, mismatched agreements or price, premium fee acknowledgement, expired quotes, earlier steps locked after a purchase), `tests/test_purchase_real_mode.py` (registering once, pending purchases checked and not repeated, failed registrations discarding the quote), the quote token staying out of every API response (`test_api.py`), the store migration (`test_store.py`), and the GoDaddy client's quote, registration (token, consent, idempotency key, fees verbatim), status and mapping helpers (`test_gddy_client.py`), all against fake GoDaddy responses. Shared factories and fakes are in `tests/helpers.py` and `conftest.py`.
 - Agent tests with a scripted fake Claude: the tool allowlist (a write tool request is refused), the step cap, the fallback to fixed search, and the trace being recorded.
 - Prompt-injection fixtures: hostile ideas must still produce schema-valid, escaped content with no URLs or contact details.
 - Rate-limit tests: the run limit blocks before any Claude call and is separate from the contact limit.

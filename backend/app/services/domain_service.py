@@ -2,9 +2,9 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
+from app.clients.gddy_client import GddyClient
 from app.core.errors import DomainTakenError, GddyError
 from app.models import DomainOffer
-from app.clients.gddy_client import GddyClient
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class DomainService:
 
         results: list[R] = []
         failures = 0
-        for item, future in zip(items, futures):
+        for item, future in zip(items, futures, strict=True):
             try:
                 results.append(future.result())
             except GddyError:

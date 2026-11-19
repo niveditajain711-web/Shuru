@@ -17,10 +17,22 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9,<10",
+    "ruff>=0.15",
 ]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]
+ignore = ["E501"]  # long lines are left to the formatter-free style used here
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

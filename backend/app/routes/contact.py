@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request
 
 from app.core.errors import RateLimitedError
-from app.models import ContactRequest, ContactResponse
 from app.routes.deps import LimiterDep, MailerDep, client_key
+from app.schemas import ContactRequest, ContactResponse
 
 router = APIRouter()
 

@@ -126,3 +126,52 @@ def test_run_limit_is_separate_from_contact_limit(client):
         assert create(client).status_code == 201
     contact = {"name": "Asha", "email": "asha@example.com", "message": "Hi"}
     assert client.post("/api/contact", json=contact).status_code == 200
+
+
+def test_purchase_flow_over_http(client):
+    run_id = client.post("/api/runs", json={"idea": "pickles", "lang": "en"}).json()["id"]
+    client.get(f"/api/runs/{run_id}/domains")
+    client.post(f"/api/runs/{run_id}/domain", json={"domain": "achaar1.com"})
+    client.post(f"/api/runs/{run_id}/generate", json={"domain": "achaar1.com", "price": 12.0})
+
+    quote = client.post(f"/api/runs/{run_id}/quote").json()["quote"]
+    assert quote["price"] == 12.0 and quote["demo"] is True
+    assert quote["agreements"][0]["type"] == "API_DPA"
+    assert "token" not in quote and "idempotency_key" not in quote
+    # Every route that returns the run hides them, not only the one that made the quote.
+    again = client.get(f"/api/runs/{run_id}").json()["quote"]
+    assert "token" not in again and "idempotency_key" not in again
+
+    done = client.post(f"/api/runs/{run_id}/purchase", json={"agreement_types": ["API_DPA"], "price": 12.0}).json()
+    assert done["state"] == "purchased"
+    assert done["purchase"]["demo"] is True
+
+
+def test_purchase_out_of_order_returns_conflict(client):
+    run_id = client.post("/api/runs", json={"idea": "pickles", "lang": "en"}).json()["id"]
+
+    response = client.post(f"/api/runs/{run_id}/purchase", json={"agreement_types": ["API_DPA"], "price": 1.0})
+
+    assert response.status_code == 409
+
+
+def test_purchase_needs_an_accepted_agreement(client):
+    response = client.post("/api/runs/x/purchase", json={"agreement_types": [], "price": 1.0})
+
+    assert response.status_code == 422
+
+
+def test_premium_fee_is_returned_with_the_domain_list_and_the_chosen_domain(client, domains):
+    from app.models import DomainOffer, PremiumFee
+
+    fee = PremiumFee(type="ONE_TIME_PREMIUM_DOMAIN_PURCHASE", currency="USD", value=390000, amount=3900.0)
+    domains.offers = [DomainOffer(name="achaar1.com", price=12.0, currency="USD", fees=[fee])]
+    run_id = create(client).json()["id"]
+
+    listed = client.get(f"/api/runs/{run_id}/domains").json()
+    assert listed["domains"][0]["fees"] == [fee.model_dump()]
+
+    # The chosen domain keeps the fee the user will see on the review screen.
+    domains.confirm_available = lambda name: domains.offers[0]
+    chosen = client.post(f"/api/runs/{run_id}/domain", json={"domain": "achaar1.com"}).json()
+    assert chosen["domain"]["fees"][0]["amount"] == 3900.0

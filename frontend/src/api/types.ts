@@ -17,24 +17,26 @@ export interface Brief {
   name_ideas: string[];
 }
 
+/** A one-time fee on a premium (aftermarket) domain, charged on top of the registration price. */
+export interface PremiumFee {
+  type: string;
+  currency: string;
+  value: number;
+  amount: number;
+}
+
 export interface DomainOffer {
   name: string;
-  price: number; // first-year price, excluding taxes and fees
+  price: number; // first-year price, excluding ICANN fees and taxes
   renewal_price: number | null;
   currency: string;
+  fees: PremiumFee[]; // premium domains only; empty for ordinary ones
 }
 
 export interface Agreement {
   type: string;
   title: string;
   url: string | null;
-}
-
-export interface QuoteFee {
-  type: string;
-  currency: string;
-  value: number;
-  amount: number;
 }
 
 /** A price locked by GoDaddy for a short time. Excludes ICANN fees and taxes. */
@@ -44,7 +46,7 @@ export interface Quote {
   price: number;
   renewal_price: number | null;
   currency: string;
-  fees: QuoteFee[];
+  fees: PremiumFee[];
   agreements: Agreement[];
   expires_at: string;
   demo: boolean;

@@ -1,5 +1,4 @@
 import contextlib
-import json
 import logging
 import sqlite3
 from collections.abc import Iterator
@@ -8,7 +7,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from app.core.errors import RunNotFoundError
-from app.models import Brief, DomainOffer, Purchase, Quote, Run, SiteContent
+from app.models import Brief, DomainOffer, LockedQuote, Purchase, Run, SiteContent
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +30,6 @@ CREATE TABLE IF NOT EXISTS runs (
     updated_at TEXT NOT NULL
 )
 """
-
-
-def _dump_quote(quote: Quote) -> str:
-    """The quote as JSON including its token and idempotency key, which the API model leaves out."""
-    return json.dumps({**quote.model_dump(mode="json"), "token": quote.token, "idempotency_key": quote.idempotency_key})
 
 
 class RunStore:
@@ -87,7 +81,7 @@ class RunStore:
                     _DOMAINS.dump_json(run.domains).decode(),
                     run.domain.model_dump_json() if run.domain else None,
                     run.site.model_dump_json() if run.site else None,
-                    _dump_quote(run.quote) if run.quote else None,
+                    run.quote.model_dump_json() if run.quote else None,
                     run.purchase.model_dump_json() if run.purchase else None,
                     run.regenerations,
                     run.created_at.isoformat(),
@@ -110,7 +104,7 @@ class RunStore:
             domains=_DOMAINS.validate_json(row["domains"]),
             domain=DomainOffer.model_validate_json(row["domain"]) if row["domain"] else None,
             site=SiteContent.model_validate_json(row["site"]) if row["site"] else None,
-            quote=Quote.model_validate_json(row["quote"]) if row["quote"] else None,
+            quote=LockedQuote.model_validate_json(row["quote"]) if row["quote"] else None,
             purchase=Purchase.model_validate_json(row["purchase"]) if row["purchase"] else None,
             regenerations=row["regenerations"],
             created_at=row["created_at"],

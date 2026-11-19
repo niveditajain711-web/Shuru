@@ -2,21 +2,20 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from app.core.config import Settings
 from app.core.errors import (
     ConfirmationMismatchError,
     DomainNotAvailableError,
     InvalidRunStateError,
     PurchaseFailedError,
-    QuoteExpiredError,
     RegenerationLimitError,
 )
-from app.models import Lang, PurchaseRequest, Run, RunState
+from app.models import Lang, Run, RunState
+from app.repositories.run_store import RunStore
+from app.schemas import PurchaseRequest
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
 from app.services.purchase_service import PurchaseService
 from app.services.site_service import SiteService
-from app.repositories.run_store import RunStore
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +38,14 @@ class Orchestrator:
         domains: DomainService,
         sites: SiteService,
         purchases: PurchaseService,
-        settings: Settings,
+        regeneration_cap: int,
     ) -> None:
         self._store = store
         self._claude = claude
         self._domains = domains
         self._sites = sites
         self._purchases = purchases
-        self._regeneration_cap = settings.regeneration_cap
+        self._regeneration_cap = regeneration_cap
 
     def create_run(self, idea: str, lang: Lang) -> Run:
         """Step 1: turn the idea into a brief. The run only exists once the brief is valid."""
@@ -109,7 +108,7 @@ class Orchestrator:
             logger.warning("confirmation does not match run_id=%s domain=%s price=%s", run_id, domain, price)
             raise ConfirmationMismatchError()
 
-        run.site = self._claude.generate_site(run.brief, run.domain.name)
+        run.site = self._claude.generate_site(run.brief, self._domain_name(run))
         run.state = RunState.SITE_GENERATED
         self._save(run)
         return run
@@ -121,7 +120,7 @@ class Orchestrator:
         if run.regenerations >= self._regeneration_cap:
             raise RegenerationLimitError(self._regeneration_cap)
 
-        run.site = self._claude.generate_site(run.brief, run.domain.name)
+        run.site = self._claude.generate_site(run.brief, self._domain_name(run))
         run.regenerations += 1
         self._save(run)
         return run
@@ -129,15 +128,14 @@ class Orchestrator:
     def render_preview(self, run_id: str, lang: Lang) -> str:
         run = self._store.get(run_id)
         self._require_state(run, RunState.SITE_GENERATED, RunState.PURCHASING, RunState.PURCHASED)
-        return self._sites.render(run.site, run.domain.name, lang)
+        return self._sites.render(run.site, self._domain_name(run), lang)
 
     def quote_purchase(self, run_id: str) -> Run:
         """Step 5a: lock the price of the chosen domain. Free. Replaces any earlier quote."""
         run = self._store.get(run_id)
         self._require_state(run, RunState.SITE_GENERATED)
-        assert run.domain is not None  # a generated site always has a chosen domain
 
-        run.quote = self._purchases.quote(run.domain.name)
+        run.quote = self._purchases.quote(self._domain_name(run))
         self._save(run)
         return run
 
@@ -154,15 +152,7 @@ class Orchestrator:
         if quote is None:
             logger.warning("purchase without a quote run_id=%s", run_id)
             raise InvalidRunStateError()
-        if quote.expires_at <= datetime.now(UTC):
-            raise QuoteExpiredError()
-        if (
-            set(request.agreement_types) != {a.type for a in quote.agreements}
-            or request.price != quote.price
-            or (quote.fees and not request.acknowledged_fees)
-        ):
-            logger.warning("purchase confirmation does not match the quote run_id=%s", run_id)
-            raise ConfirmationMismatchError()
+        self._purchases.check_acceptance(quote, request)
 
         try:
             # The user clicked accept to send this request, so now is the time of consent.
@@ -187,6 +177,14 @@ class Orchestrator:
         run.state = RunState.PURCHASED if run.purchase.status == "completed" else RunState.PURCHASING
         self._save(run)
         return run
+
+    @staticmethod
+    def _domain_name(run: Run) -> str:
+        """The chosen domain's name. Every state that needs one has it, so a missing one is a bug."""
+        if run.domain is None:
+            logger.error("run has no chosen domain run_id=%s state=%s", run.id, run.state)
+            raise InvalidRunStateError()
+        return run.domain.name
 
     def _save(self, run: Run) -> None:
         run.updated_at = datetime.now(UTC)

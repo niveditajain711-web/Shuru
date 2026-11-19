@@ -1,6 +1,6 @@
 from app.models import Lang
 from app.services.site_service import SiteService
-from tests.conftest import make_site
+from tests.helpers import make_site
 
 
 def test_renders_the_requested_language():

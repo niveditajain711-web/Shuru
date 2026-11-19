@@ -5,8 +5,8 @@ export type Step = "idea" | "domain" | "review" | "preview" | "checkout";
 export const STEPS: { id: Step; label: string }[] = [
   { id: "idea", label: "Idea" },
   { id: "domain", label: "Domain" },
-  { id: "review", label: "Review" },
-  { id: "preview", label: "Preview" },
+  { id: "review", label: "Price" },
+  { id: "preview", label: "Site" },
   { id: "checkout", label: "Buy" },
 ];
 

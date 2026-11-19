@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel
+
+from app.models.domain import PremiumFee
 
 
 class Agreement(BaseModel):
@@ -12,33 +14,26 @@ class Agreement(BaseModel):
     url: str | None = None
 
 
-class QuoteFee(BaseModel):
-    """A premium-domain fee. `value` (minor units) is kept as quoted, because it is echoed back verbatim."""
-
-    type: str
-    currency: str
-    value: int
-    amount: float
-
-
 class Quote(BaseModel):
-    """A price locked by GoDaddy for a short time. Prices exclude ICANN fees and taxes.
-
-    `token` and `idempotency_key` are never sent to the browser (`exclude=True`); the run store
-    saves them explicitly.
-    """
+    """A price locked by GoDaddy for a short time. Prices exclude ICANN fees and taxes. Safe to show the user."""
 
     domain: str
     period: int
     price: float
     renewal_price: float | None = None
     currency: str
-    fees: list[QuoteFee] = []
+    fees: list[PremiumFee] = []
     agreements: list[Agreement]
     expires_at: datetime
     demo: bool = False
-    token: str = Field(default="", exclude=True)
-    idempotency_key: str = Field(default="", exclude=True)
+
+
+class LockedQuote(Quote):
+    """A quote with the secrets needed to buy it. Stored with the run, never sent to the browser
+    (the API returns `Quote`; see `schemas.RunResponse`)."""
+
+    token: str
+    idempotency_key: str = ""
 
 
 class Purchase(BaseModel):
@@ -52,11 +47,3 @@ class Purchase(BaseModel):
     registration_id: str | None = None
     agreed_at: datetime
     expires_at: datetime | None = None
-
-
-class PurchaseRequest(BaseModel):
-    """What the user accepted on the checkout screen. Must match the stored quote."""
-
-    agreement_types: Annotated[list[Annotated[str, StringConstraints(min_length=1)]], Field(min_length=1)]
-    price: float
-    acknowledged_fees: bool = False
