@@ -82,8 +82,8 @@ class RateLimitedError(AppError):
     status_code = 429
     code = "rate_limited"
 
-    def __init__(self) -> None:
-        super().__init__("You've sent a few messages already. Please try again a little later.")
+    def __init__(self, message: str = "You've sent a few messages already. Please try again a little later.") -> None:
+        super().__init__(message)
 
 
 class MailError(AppError):

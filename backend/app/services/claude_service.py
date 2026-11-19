@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 
 import anthropic
 from pydantic import BaseModel, ValidationError
@@ -9,6 +10,7 @@ from app.core.config import Settings
 from app.core.errors import ClaudeError
 from app.models import Brief, Lang, SiteContent
 from app.services import prompts
+from app.services.content_check import find_problems
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +19,11 @@ _MAX_ATTEMPTS = 2
 
 
 class ClaudeService:
-    """Claude generates structured JSON at fixed points. It has no tools and decides nothing."""
+    """Claude generates structured JSON at fixed points. It has no tools and decides nothing.
+
+    Every reply must match its schema and pass the content check (`content_check.find_problems`):
+    no links, contact details, markup or prompt talk. Either failure gets one retry, then an error.
+    """
 
     def __init__(self, client: anthropic.Anthropic, settings: Settings) -> None:
         self._client = client
@@ -32,6 +38,7 @@ class ClaudeService:
             system=prompts.BRIEF_SYSTEM,
             user=prompts.brief_user_message(idea, lang),
             schema=Brief,
+            check=find_problems,
         )
 
     def generate_site(self, brief: Brief, domain: str) -> SiteContent:
@@ -43,6 +50,8 @@ class ClaudeService:
             system=prompts.SITE_SYSTEM,
             user=prompts.site_user_message(brief.model_dump_json(), domain),
             schema=SiteContent,
+            # The site may mention its own domain; any other domain counts as a link.
+            check=lambda site: find_problems(site, allowed_domains=[domain]),
         )
 
     def _generate[T: BaseModel](
@@ -55,6 +64,7 @@ class ClaudeService:
         system: str,
         user: str,
         schema: type[T],
+        check: Callable[[T], list[str]],
     ) -> T:
         # The schema is serialised with sorted keys so the cached system prompt is byte-stable.
         schema_json = json.dumps(schema.model_json_schema(), sort_keys=True)
@@ -66,16 +76,26 @@ class ClaudeService:
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             text = self._request(call, model, max_tokens, effort, system_blocks, messages, attempt)
             try:
-                return schema.model_validate_json(_extract_json(text))
+                result = schema.model_validate_json(_extract_json(text))
             except ValidationError as exc:
                 logger.warning("claude invalid output call=%s attempt=%d error=%s", call, attempt, exc)
-                messages += [
-                    {"role": "assistant", "content": text},
-                    {
-                        "role": "user",
-                        "content": f"That JSON was invalid: {exc}\nReply again with corrected JSON only.",
-                    },
-                ]
+                feedback = f"That JSON was invalid: {exc}\nReply again with corrected JSON only."
+            else:
+                problems = check(result)
+                if not problems:
+                    return result
+                # Logged as field paths and reasons only, so visitor text never reaches the logs.
+                logger.warning("claude unsafe output call=%s attempt=%d problems=%s", call, attempt, problems)
+                feedback = (
+                    "That JSON broke the content rules: "
+                    + "; ".join(problems)
+                    + ". Website text must not contain links, domains, email addresses, phone numbers, "
+                    "HTML or code, or talk about instructions. Reply again with corrected JSON only."
+                )
+            messages += [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": feedback},
+            ]
 
         logger.error("claude gave up call=%s attempts=%d", call, _MAX_ATTEMPTS)
         raise ClaudeError()

@@ -109,4 +109,6 @@ def mailer() -> FakeMailer:
 
 @pytest.fixture
 def client(orchestrator, mailer) -> TestClient:
-    return TestClient(create_app(orchestrator, mailer, RateLimiter(3, 3600)), raise_server_exceptions=False)
+    return TestClient(
+        create_app(orchestrator, mailer, RateLimiter(3, 3600), RateLimiter(5, 3600)), raise_server_exceptions=False
+    )

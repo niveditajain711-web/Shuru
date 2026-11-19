@@ -105,3 +105,24 @@ def test_unexpected_error_hides_details(client, orchestrator, monkeypatch):
     assert response.status_code == 500
     assert "secret" not in response.text
     assert response.json()["error"]["code"] == "internal_error"
+
+
+def test_run_creation_is_rate_limited(client, claude):
+    calls = []
+    original = claude.generate_brief
+    claude.generate_brief = lambda idea, lang: calls.append(idea) or original(idea, lang)
+
+    statuses = [create(client).status_code for _ in range(6)]
+
+    assert statuses == [201, 201, 201, 201, 201, 429]
+    blocked = create(client).json()
+    assert blocked["error"]["code"] == "rate_limited"
+    assert "sites" in blocked["error"]["message"]
+    assert len(calls) == 5  # blocked requests never reach Claude
+
+
+def test_run_limit_is_separate_from_contact_limit(client):
+    for _ in range(5):
+        assert create(client).status_code == 201
+    contact = {"name": "Asha", "email": "asha@example.com", "message": "Hi"}
+    assert client.post("/api/contact", json=contact).status_code == 200

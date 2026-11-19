@@ -34,11 +34,14 @@ def build_orchestrator(settings: Settings) -> Orchestrator:
     )
 
 
-def create_app(orchestrator: Orchestrator, mailer: MailService, contact_limiter: RateLimiter) -> FastAPI:
+def create_app(
+    orchestrator: Orchestrator, mailer: MailService, contact_limiter: RateLimiter, run_limiter: RateLimiter
+) -> FastAPI:
     app = FastAPI(title="Shuru")
     app.state.orchestrator = orchestrator
     app.state.mailer = mailer
     app.state.contact_limiter = contact_limiter
+    app.state.run_limiter = run_limiter
     app.include_router(router)
     app.add_exception_handler(AppError, _handle_app_error)
     app.add_exception_handler(Exception, _handle_unexpected_error)
@@ -61,6 +64,7 @@ def create_default_app() -> FastAPI:
         build_orchestrator(settings),
         MailService(settings),
         RateLimiter(settings.contact_rate_limit, settings.contact_rate_window_seconds),
+        RateLimiter(settings.run_rate_limit, settings.run_rate_window_seconds),
     )
 
 

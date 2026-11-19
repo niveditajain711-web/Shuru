@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
+from app.core.errors import RateLimitedError
 from app.models import (
     DOMAIN_LABEL_PATTERN,
     ChooseDomainRequest,
@@ -11,13 +12,16 @@ from app.models import (
     Lang,
     Run,
 )
-from app.routes.deps import OrchestratorDep
+from app.routes.deps import OrchestratorDep, RunLimiterDep, client_key
 
 router = APIRouter()
 
 
 @router.post("/runs", response_model=Run, status_code=201)
-def create_run(body: CreateRunRequest, orchestrator: OrchestratorDep) -> Run:
+def create_run(body: CreateRunRequest, request: Request, orchestrator: OrchestratorDep, limiter: RunLimiterDep) -> Run:
+    # Checked before the Claude call, so a blocked request costs nothing.
+    if not limiter.allow(client_key(request)):
+        raise RateLimitedError("You've started a few sites already. Please try again in a little while.")
     return orchestrator.create_run(body.idea, body.lang)
 
 
