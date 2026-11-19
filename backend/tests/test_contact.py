@@ -1,8 +1,8 @@
 import smtplib
 
-from app.config import Settings
-from app.errors import MailError, MailNotConfiguredError
-from app.rate_limit import RateLimiter
+from app.core.config import Settings
+from app.core.errors import MailError, MailNotConfiguredError
+from app.utils.rate_limit import RateLimiter
 from app.services import mail_service
 from app.services.mail_service import MailService
 import pytest

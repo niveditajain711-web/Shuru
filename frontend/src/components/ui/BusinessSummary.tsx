@@ -1,4 +1,4 @@
-import type { Run } from "../api/types";
+import type { Run } from "../../api/types";
 
 interface Props {
   run: Run;

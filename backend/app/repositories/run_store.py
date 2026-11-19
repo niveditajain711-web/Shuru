@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from app.errors import RunNotFoundError
+from app.core.errors import RunNotFoundError
 from app.models import Brief, DomainOffer, Run, SiteContent
 
 logger = logging.getLogger(__name__)

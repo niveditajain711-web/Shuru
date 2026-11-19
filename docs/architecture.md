@@ -95,19 +95,19 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 
 ### 4.2 Backend (Python + FastAPI)
 
-Thin HTTP layer over a set of services. One endpoint per step, all keyed by `run_id`.
+Thin HTTP layer (`routes/`) over a set of services. One endpoint per step, all keyed by `run_id`. Folder responsibilities are in section 12: `core/` (settings, errors, logging), `models/`, `routes/`, `services/`, `clients/` (external APIs), `repositories/` (SQLite) and `utils/`.
 
 | Service | Responsibility |
 | --- | --- |
 | `claude_service` | The three Claude calls. Prompts, model choice, `max_tokens`, prompt caching, Pydantic validation, one retry on invalid JSON. |
-| `gddy_client` | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses, converts minor-unit prices, maps errors to typed exceptions. Only module that calls GoDaddy. |
+| `gddy_client` (in `clients/`) | HTTP client for the GoDaddy v3 REST API (`httpx`): Bearer auth, timeouts, one retry on 429, parses responses, converts minor-unit prices, maps errors to typed exceptions. Only module that calls GoDaddy. |
 | `domain_service` | Suggest, availability, quote, purchase. Owns quote-token expiry handling. |
 | `site_service` | Renders content JSON through the fixed template to static HTML. |
 | `mail_service` | Sends contact-form messages over SMTP (`smtplib`) to the Shuru mailbox. Implicit TLS on port 465, STARTTLS otherwise. Only module that talks SMTP; takes credentials from settings only. |
 | `packager` | Wraps the HTML in a minimal Node.js app and zips it to the publishing target's requirements. |
 | `publisher` | Interface for publishing a built site (see 4.4). |
 | `dns_service` | Adds the DNS records that point the domain at the published site. |
-| `run_store` | Persists run state and results in SQLite (stdlib `sqlite3`, one file, WAL mode). |
+| `run_store` (in `repositories/`) | Persists run state and results in SQLite (stdlib `sqlite3`, one file, WAL mode). |
 | `orchestrator` | The fixed state machine that sequences the services (section 5). |
 
 ### 4.3 Claude usage
@@ -274,25 +274,41 @@ shuru/
   architecture.md
   backend/
     app/
-      main.py            # FastAPI app and routes
-      orchestrator.py    # state machine
-      models.py          # Pydantic models (API, Claude output, DB)
-      rate_limit.py      # in-memory per-client limiter (contact form)
+      main.py            # FastAPI app factory, wiring, error handlers
+      core/              # config.py (Settings), errors.py (typed errors), logging.py
+      models/            # Pydantic models: common.py (types, enums), site.py (Claude output, domains),
+                         #   run.py (Run + run requests), contact.py (contact request/response)
+      routes/            # HTTP layer, mounted under /api: runs.py, contact.py, deps.py (dependencies)
       services/
+        orchestrator.py  # state machine
         claude_service.py
-        gddy_client.py
         domain_service.py
         site_service.py
         mail_service.py  # SMTP contact mail
-        packager.py
-        publisher/       # Publisher protocol and implementations
-        dns_service.py
-      store.py           # run store
+        prompts.py
+        packager.py      # planned
+        publisher/       # planned: Publisher protocol and implementations
+        dns_service.py   # planned
+      clients/           # gddy_client.py: external API clients
+      repositories/      # run_store.py: SQLite persistence
+      utils/             # rate_limit.py: in-memory per-client limiter (contact form)
       templates/         # fixed site template(s)
     tests/
     fixtures/            # cached runs for replay
   frontend/
-    src/                 # wizard screens, stepper, URL routing, API client, tests (Vitest)
+    src/
+      main.tsx, App.tsx  # entry point and wizard shell (state lives in App)
+      api/               # API client and shared types
+      components/
+        steps/           # IdeaStep, DomainStep, ReviewStep, PreviewStep
+        dialogs/         # ConfirmDialog, SupportDialog
+        forms/           # ContactForm
+        ui/              # Stepper, Loading, ErrorMessage, ErrorBoundary, Segmented, Logo, BusinessSummary
+      hooks/             # useAction
+      lib/               # navigation (step rules) and routing (URL hash)
+      utils/             # format helpers
+      styles/            # global CSS
+      *.test.ts(x)       # Vitest, next to the code they cover
   README.md
 ```
 

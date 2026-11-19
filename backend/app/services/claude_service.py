@@ -5,8 +5,8 @@ import time
 import anthropic
 from pydantic import BaseModel, ValidationError
 
-from app.config import Settings
-from app.errors import ClaudeError
+from app.core.config import Settings
+from app.core.errors import ClaudeError
 from app.models import Brief, Lang, SiteContent
 from app.services import prompts
 

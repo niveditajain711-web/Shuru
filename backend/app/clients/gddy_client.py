@@ -7,7 +7,7 @@ from decimal import Decimal
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from app.errors import GddyError
+from app.core.errors import GddyError
 from app.models import DOMAIN_LABEL_PATTERN, DOMAIN_PATTERN, DomainOffer
 
 logger = logging.getLogger(__name__)

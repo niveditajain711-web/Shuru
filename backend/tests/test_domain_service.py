@@ -1,6 +1,6 @@
 import pytest
 
-from app.errors import DomainTakenError, GddyError
+from app.core.errors import DomainTakenError, GddyError
 from app.models import DomainOffer
 from app.services.domain_service import DomainService
 

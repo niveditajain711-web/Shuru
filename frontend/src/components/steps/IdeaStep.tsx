@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { api } from "../api/client";
-import type { Lang, Run } from "../api/types";
-import { useAction } from "../hooks/useAction";
-import { ErrorMessage } from "./ErrorMessage";
-import { Loading } from "./Loading";
-import { Segmented } from "./Segmented";
+import { api } from "../../api/client";
+import type { Lang, Run } from "../../api/types";
+import { useAction } from "../../hooks/useAction";
+import { ErrorMessage } from "../ui/ErrorMessage";
+import { Loading } from "../ui/Loading";
+import { Segmented } from "../ui/Segmented";
 
 const MAX_IDEA_LENGTH = 500;
 

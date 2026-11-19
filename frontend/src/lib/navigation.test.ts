@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Run, RunState } from "./api/types";
+import type { Run, RunState } from "../api/types";
 import {
   isStepAvailable,
   naturalStep,

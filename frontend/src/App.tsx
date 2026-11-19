@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Run } from "./api/types";
-import { ConfirmDialog } from "./components/ConfirmDialog";
-import { DomainStep } from "./components/DomainStep";
-import { ErrorMessage } from "./components/ErrorMessage";
-import { IdeaStep } from "./components/IdeaStep";
-import { Loading } from "./components/Loading";
-import { Logo } from "./components/Logo";
-import { PreviewStep } from "./components/PreviewStep";
-import { ReviewStep } from "./components/ReviewStep";
-import { SupportDialog } from "./components/SupportDialog";
-import { Stepper } from "./components/Stepper";
+import { ConfirmDialog } from "./components/dialogs/ConfirmDialog";
+import { DomainStep } from "./components/steps/DomainStep";
+import { ErrorMessage } from "./components/ui/ErrorMessage";
+import { IdeaStep } from "./components/steps/IdeaStep";
+import { Loading } from "./components/ui/Loading";
+import { Logo } from "./components/ui/Logo";
+import { PreviewStep } from "./components/steps/PreviewStep";
+import { ReviewStep } from "./components/steps/ReviewStep";
+import { SupportDialog } from "./components/dialogs/SupportDialog";
+import { Stepper } from "./components/ui/Stepper";
 import { useAction } from "./hooks/useAction";
-import { isStepAvailable, naturalStep, STEPS, type Step } from "./navigation";
-import { navigate, useRoute } from "./routing";
+import { isStepAvailable, naturalStep, STEPS, type Step } from "./lib/navigation";
+import { navigate, useRoute } from "./lib/routing";
 
 export function App() {
   const route = useRoute();

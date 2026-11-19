@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api } from "../api/client";
-import { useAction } from "../hooks/useAction";
-import { ErrorMessage } from "./ErrorMessage";
-import { Loading } from "./Loading";
+import { api } from "../../api/client";
+import { useAction } from "../../hooks/useAction";
+import { ErrorMessage } from "../ui/ErrorMessage";
+import { Loading } from "../ui/Loading";
 
 const MAX_MESSAGE_LENGTH = 5000;
 
