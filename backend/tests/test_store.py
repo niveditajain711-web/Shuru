@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.errors import RunNotFoundError
+from app.core.errors import RunNotFoundError
 from app.models import DomainOffer, Lang, Run, RunState
-from app.store import RunStore
+from app.repositories.run_store import RunStore
 from tests.conftest import make_brief, make_site
 
 

@@ -2,9 +2,9 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 
-from app.errors import DomainTakenError, GddyError
+from app.core.errors import DomainTakenError, GddyError
 from app.models import DomainOffer
-from app.services.gddy_client import GddyClient
+from app.clients.gddy_client import GddyClient
 
 logger = logging.getLogger(__name__)
 

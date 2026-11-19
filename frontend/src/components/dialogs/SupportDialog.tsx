@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ContactForm } from "./ContactForm";
+import { ContactForm } from "../forms/ContactForm";
 
 interface Props {
   open: boolean;

@@ -5,18 +5,18 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import router
-from app.config import Settings
-from app.errors import AppError
-from app.logging_config import setup_logging
-from app.orchestrator import Orchestrator
-from app.rate_limit import RateLimiter
+from app.routes import router
+from app.core.config import Settings
+from app.core.errors import AppError
+from app.core.logging import setup_logging
+from app.services.orchestrator import Orchestrator
+from app.utils.rate_limit import RateLimiter
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
-from app.services.gddy_client import GddyClient
+from app.clients.gddy_client import GddyClient
 from app.services.mail_service import MailService
 from app.services.site_service import SiteService
-from app.store import RunStore
+from app.repositories.run_store import RunStore
 
 logger = logging.getLogger(__name__)
 

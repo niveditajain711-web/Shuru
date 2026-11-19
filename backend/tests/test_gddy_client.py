@@ -3,9 +3,9 @@ import json
 import httpx
 import pytest
 
-from app.errors import GddyError
+from app.core.errors import GddyError
 from app.models import DomainOffer
-from app.services.gddy_client import GddyClient
+from app.clients.gddy_client import GddyClient
 
 BASE = "https://api.example.test/v3/domains"
 
@@ -125,7 +125,7 @@ def test_renewal_in_another_currency_is_dropped():
 
 
 def test_rate_limit_is_retried_once(monkeypatch):
-    monkeypatch.setattr("app.services.gddy_client.time.sleep", lambda seconds: None)
+    monkeypatch.setattr("app.clients.gddy_client.time.sleep", lambda seconds: None)
     responses = iter([httpx.Response(429, headers={"Retry-After": "1"}), httpx.Response(200, json=SUGGESTIONS)])
     client, requests = make_client(lambda request: next(responses))
 
@@ -134,7 +134,7 @@ def test_rate_limit_is_retried_once(monkeypatch):
 
 
 def test_persistent_rate_limit_is_an_error(monkeypatch):
-    monkeypatch.setattr("app.services.gddy_client.time.sleep", lambda seconds: None)
+    monkeypatch.setattr("app.clients.gddy_client.time.sleep", lambda seconds: None)
     client, requests = make_client(respond({"name": "TOO_MANY_REQUESTS"}, status=429))
 
     with pytest.raises(GddyError):

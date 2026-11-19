@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { api } from "../api/client";
-import type { Lang, Run } from "../api/types";
-import { useAction } from "../hooks/useAction";
-import { ErrorMessage } from "./ErrorMessage";
-import { Loading } from "./Loading";
-import { Segmented } from "./Segmented";
+import { api } from "../../api/client";
+import type { Lang, Run } from "../../api/types";
+import { useAction } from "../../hooks/useAction";
+import { ErrorMessage } from "../ui/ErrorMessage";
+import { Loading } from "../ui/Loading";
+import { Segmented } from "../ui/Segmented";
 
 // Mirrors the backend's default regeneration cap (SHURU_REGENERATION_CAP). If it is configured
 // differently, the backend's own error message still explains the limit.

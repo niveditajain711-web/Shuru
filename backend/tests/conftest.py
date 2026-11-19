@@ -1,14 +1,14 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import Settings
-from app.errors import ClaudeError, DomainTakenError, GddyError
+from app.core.config import Settings
+from app.core.errors import ClaudeError, DomainTakenError, GddyError
 from app.main import create_app
 from app.models import Brief, DomainOffer, Lang, SiteContent
-from app.orchestrator import Orchestrator
-from app.rate_limit import RateLimiter
+from app.services.orchestrator import Orchestrator
+from app.utils.rate_limit import RateLimiter
 from app.services.site_service import SiteService
-from app.store import RunStore
+from app.repositories.run_store import RunStore
 
 NAME_IDEAS = [f"achaar{i}" for i in range(1, 9)]
 

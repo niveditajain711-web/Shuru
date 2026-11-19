@@ -1,6 +1,6 @@
 import pytest
 
-from app.errors import (
+from app.core.errors import (
     ClaudeError,
     ConfirmationMismatchError,
     DomainNotAvailableError,

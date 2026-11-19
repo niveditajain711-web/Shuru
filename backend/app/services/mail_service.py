@@ -4,8 +4,8 @@ import ssl
 from email.message import EmailMessage
 from email.utils import formataddr
 
-from app.config import Settings
-from app.errors import MailError, MailNotConfiguredError
+from app.core.config import Settings
+from app.core.errors import MailError, MailNotConfiguredError
 
 logger = logging.getLogger(__name__)
 

@@ -205,7 +205,7 @@ FastAPI backend
 | Dev | GitHub Codespaces with Claude Code |
 | App hosting | Render or Railway; must be able to install `gddy` at build time once the hosting step is built |
 
-Suggested backend modules: `api/`, `claude/`, `godaddy/`, `site/`, `runs/`, `replay/`.
+Backend layout: `core/` (settings, errors, logging), `models/`, `routes/`, `services/` (Claude, domains, site, mail, orchestrator), `clients/` (GoDaddy), `repositories/` (SQLite run store) and `utils/`. The frontend groups `components/` into `steps/`, `dialogs/`, `forms/` and `ui/`, with `lib/`, `hooks/`, `utils/` and `styles/` beside them. Details are in `architecture.md` section 12.
 
 ## 10. Error handling
 

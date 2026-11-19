@@ -5,8 +5,8 @@ import anthropic
 import httpx
 import pytest
 
-from app.config import Settings
-from app.errors import ClaudeError
+from app.core.config import Settings
+from app.core.errors import ClaudeError
 from app.models import Lang
 from app.services.claude_service import ClaudeService
 from tests.conftest import NAME_IDEAS, make_brief

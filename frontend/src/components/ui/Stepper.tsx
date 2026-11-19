@@ -1,5 +1,5 @@
-import type { Run } from "../api/types";
-import { isStepAvailable, STEPS, stepIndex, stepStatus, unavailableHint, type Step } from "../navigation";
+import type { Run } from "../../api/types";
+import { isStepAvailable, STEPS, stepIndex, stepStatus, unavailableHint, type Step } from "../../lib/navigation";
 
 interface Props {
   current: Step;

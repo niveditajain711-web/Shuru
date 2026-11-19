@@ -19,7 +19,7 @@ uvicorn app.main:create_default_app --factory --reload
 .venv/bin/python -m pytest            # tests use fakes, no external calls
 ```
 
-Settings come from `SHURU_*` environment variables or `backend/.env` (see `app/config.py`), for example `SHURU_GDDY_READ_BASE_URL` (default `https://api.ote-godaddy.com/v3/domains`, the test environment) and `SHURU_LOG_LEVEL`. If the test environment returns no domain suggestions, set `SHURU_GDDY_READ_BASE_URL=https://api.godaddy.com/v3/domains`: suggest and availability calls are read-only and cannot spend money. The `gddy` CLI is not needed until the hosting step is built.
+Settings come from `SHURU_*` environment variables or `backend/.env` (see `app/core/config.py`), for example `SHURU_GDDY_READ_BASE_URL` (default `https://api.ote-godaddy.com/v3/domains`, the test environment) and `SHURU_LOG_LEVEL`. If the test environment returns no domain suggestions, set `SHURU_GDDY_READ_BASE_URL=https://api.godaddy.com/v3/domains`: suggest and availability calls are read-only and cannot spend money. The `gddy` CLI is not needed until the hosting step is built.
 
 **Contact form mail.** The "Contact us" form emails the Shuru mailbox through GoDaddy's SMTP server. Set these in `backend/.env` (gitignored; see `.env.example`) or the server's environment: `SHURU_SMTP_USER` (the full mailbox address), `SHURU_SMTP_PASSWORD`, and optionally `SHURU_SMTP_HOST` (default `smtpout.secureserver.net`, not `smtp.titan.email`), `SHURU_SMTP_PORT` (default 465; other ports use STARTTLS) and `SHURU_CONTACT_TO`. Never commit the password.
 
