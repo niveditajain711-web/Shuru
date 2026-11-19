@@ -2,10 +2,23 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DomainOffer, Run } from "./api/types";
+import type { DomainOffer, Quote, Run } from "./api/types";
 import { App } from "./App";
 
-const OFFER: DomainOffer = { name: "achaar1.com", price: 9.19, renewal_price: 11.59, currency: "USD" };
+const OFFER: DomainOffer = { name: "achaar1.com", price: 9.19, renewal_price: 11.59, currency: "USD", fees: [] };
+const PREMIUM_FEE = { type: "ONE_TIME_PREMIUM_DOMAIN_PURCHASE", currency: "USD", value: 390000, amount: 3900 };
+
+const QUOTE: Quote = {
+  domain: "achaar1.com",
+  period: 1,
+  price: 9.19,
+  renewal_price: 11.59,
+  currency: "USD",
+  fees: [],
+  agreements: [{ type: "API_DPA", title: "Domain Purchase Agreement", url: "https://example.test/agreement" }],
+  expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+  demo: true,
+};
 
 let runs: Record<string, Run>;
 let calls: string[];
@@ -19,6 +32,8 @@ function makeRun(overrides: Partial<Run> = {}): Run {
     brief: { audience: "Home cooks", tone: "Warm", tagline: "Pickles like home", name_ideas: ["achaar"] },
     domains: [],
     domain: null,
+    quote: null,
+    purchase: null,
     regenerations: 0,
     ...overrides,
   };
@@ -55,6 +70,29 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
     case "generate":
       Object.assign(run, { state: "site_generated" });
       return Promise.resolve(json(run));
+    case "quote":
+      run.quote = QUOTE;
+      return Promise.resolve(json(run));
+    case "purchase": {
+      const body = JSON.parse(String(init?.body));
+      if (body.price !== QUOTE.price || !body.agreement_types.includes("API_DPA")) {
+        return Promise.resolve(json({ error: { code: "confirmation_mismatch", message: "Please review again." } }, 409));
+      }
+      Object.assign(run, {
+        state: "purchased",
+        purchase: {
+          domain: QUOTE.domain,
+          status: "completed",
+          demo: true,
+          price: QUOTE.price,
+          currency: "USD",
+          registration_id: null,
+          agreed_at: new Date().toISOString(),
+          expires_at: null,
+        },
+      });
+      return Promise.resolve(json(run));
+    }
     default:
       return Promise.resolve(json({ error: { code: "x", message: "unexpected" } }, 500));
   }
@@ -83,10 +121,9 @@ async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   render(<App />);
   await user.type(screen.getByLabelText("Your idea"), "pickles");
   await user.click(screen.getByRole("button", { name: "Create my business summary" }));
-  await user.click(await screen.findByRole("button", { name: "Find domains" }));
   await user.click(await screen.findByLabelText(/achaar1\.com/));
   await user.click(screen.getByRole("button", { name: "Choose this domain" }));
-  await screen.findByRole("heading", { name: "Review your domain" });
+  await screen.findByRole("heading", { name: "Check the price" });
 }
 
 describe("support dialog", () => {
@@ -148,9 +185,167 @@ describe("wizard flow", () => {
 
     await user.click(screen.getByRole("button", { name: "Pick a different domain" }));
 
-    await screen.findByRole("heading", { name: "Pick your domain" });
+    await screen.findByRole("heading", { name: "Choose your domain" });
     expect(calls.filter((call) => call.includes("/domains")).length).toBe(searches);
     expect((screen.getByLabelText(/achaar1\.com/) as HTMLInputElement).checked).toBe(true);
+  });
+});
+
+describe("premium domains", () => {
+  it("shows the one-time fee in the domain list and on the review screen", async () => {
+    const premium = { ...OFFER, name: "achaar1.com", fees: [PREMIUM_FEE] };
+    runs.r1 = makeRun({ state: "domains_listed", domains: [premium] });
+    window.location.hash = "#/run/r1/domain";
+    render(<App />);
+
+    await screen.findByText(/Premium domain: plus a one-time fee of \$3,900\.00/);
+
+    runs.r1 = makeRun({ state: "domain_chosen", domain: premium, domains: [premium] });
+    window.location.hash = "#/run/r1/review";
+    cleanup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Check the price" });
+    expect(screen.getByText(/plus a one-time fee of \$3,900\.00, charged when you buy/)).toBeTruthy();
+    expect(screen.getByText("$3,909.19")).toBeTruthy(); // 9.19 + 3,900.00
+  });
+
+  it("shows nothing extra for an ordinary domain", async () => {
+    runs.r1 = makeRun({ state: "domain_chosen", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/review";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Check the price" });
+    expect(screen.queryByText(/Premium domain/)).toBeNull();
+    expect(screen.queryByText(/Total first year/)).toBeNull();
+  });
+});
+
+describe("checkout", () => {
+  function openCheckout() {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+  }
+
+  it("gets a quote, needs the agreement ticked, and finishes a demo purchase", async () => {
+    const user = userEvent.setup();
+    openCheckout();
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(await screen.findByText(/no domain will be registered/)).toBeTruthy();
+    const buy = screen.getByRole("button", { name: "Complete demo purchase" }) as HTMLButtonElement;
+    expect(buy.disabled).toBe(true);
+    expect(calls).toContain("POST /runs/r1/quote");
+
+    expect(screen.getByRole("link", { name: "Domain Purchase Agreement" }).getAttribute("href")).toBe(
+      "https://example.test/agreement",
+    );
+    await user.click(screen.getByLabelText(/I have read and agree/));
+    expect(buy.disabled).toBe(false);
+    await user.click(buy);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+    expect(screen.getByText(/\(not charged\)/)).toBeTruthy();
+  });
+
+  it("opens the Buy step from the preview", async () => {
+    const user = userEvent.setup();
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/preview";
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Buy domain" }));
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(window.location.hash).toBe("#/run/r1/checkout");
+  });
+
+  it("locks every earlier step after the purchase and shows the site", async () => {
+    runs.r1 = makeRun({
+      state: "purchased",
+      domain: OFFER,
+      purchase: {
+        domain: "achaar1.com", status: "completed", demo: true, price: 9.19, currency: "USD",
+        registration_id: null, agreed_at: new Date().toISOString(), expires_at: null,
+      },
+    });
+    window.location.hash = "#/run/r1/preview";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+    await waitFor(() => expect(window.location.hash).toBe("#/run/r1/checkout"));
+    const nav = screen.getByRole("navigation", { name: "Progress" });
+    expect(within(nav).queryAllByRole("button")).toHaveLength(0);
+
+    expect(document.querySelector("iframe.preview")?.getAttribute("src")).toContain("/api/runs/r1/preview?lang=en");
+    expect(screen.getByRole("link", { name: "Open your site in a new tab" }).getAttribute("href")).toContain(
+      "/preview?lang=en",
+    );
+    expect(screen.getByRole("button", { name: "Start a new site" })).toBeTruthy();
+  });
+
+  it("shows the confirmation when a purchased run is opened again", async () => {
+    runs.r1 = makeRun({
+      state: "purchased",
+      domain: OFFER,
+      purchase: {
+        domain: "achaar1.com", status: "completed", demo: true, price: 9.19, currency: "USD",
+        registration_id: null, agreed_at: new Date().toISOString(), expires_at: null,
+      },
+    });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+  });
+
+  it("does not quote again while the stored quote is still locked", async () => {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER], quote: QUOTE });
+    window.location.hash = "#/run/r1/checkout";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Buy your domain" });
+    expect(calls.some((call) => call.endsWith("/quote"))).toBe(false);
+  });
+});
+
+describe("after the idea is submitted", () => {
+  it("goes straight to the domain step, which searches by itself", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.click(screen.getByRole("button", { name: "Create my business summary" }));
+
+    await screen.findByRole("heading", { name: "Choose your domain" });
+    expect(window.location.hash).toBe("#/run/r1/domain");
+    expect(screen.queryByRole("button", { name: "Find domains" })).toBeNull();
+    expect(screen.getByText("Pickles like home")).toBeTruthy(); // the summary is on this screen
+    await screen.findByLabelText(/achaar1\.com/);
+    expect(calls.filter((call) => call.includes("/domains"))).toHaveLength(1);
+  });
+
+  it("shows the idea read-only when the user goes back to the Idea step", async () => {
+    const user = userEvent.setup();
+    runs.r1 = makeRun({ state: "domains_listed", domains: [OFFER], idea: "I make pickles" });
+    window.location.hash = "#/run/r1/idea";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Your idea" });
+    expect(screen.getByText("I make pickles")).toBeTruthy();
+    expect(screen.queryByLabelText("Your idea")).toBeNull(); // no form: the idea cannot be changed
+    expect(screen.getByText("Pickles like home")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Back to domains" }));
+    await screen.findByRole("heading", { name: "Choose your domain" });
+  });
+
+  it("offers to go back to the site once it has been written", async () => {
+    runs.r1 = makeRun({ state: "site_generated", domain: OFFER, domains: [OFFER] });
+    window.location.hash = "#/run/r1/idea";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Your idea" });
+    expect(screen.getByRole("button", { name: "Back to your site" })).toBeTruthy();
   });
 });
 
@@ -159,8 +354,7 @@ describe("domain step business summary", () => {
     render(<App />);
     await user.type(screen.getByLabelText("Your idea"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
-    await user.click(await screen.findByRole("button", { name: "Find domains" }));
-    await screen.findByRole("heading", { name: "Pick your domain" });
+      await screen.findByRole("heading", { name: "Choose your domain" });
   }
 
   it("shows the tagline and name ideas, with audience and tone folded away", async () => {
@@ -197,7 +391,7 @@ describe("stepper", () => {
     const nav = screen.getByRole("navigation", { name: "Progress" });
 
     await user.click(within(nav).getByRole("button", { name: /Domain/ }));
-    await screen.findByRole("heading", { name: "Pick your domain" });
+    await screen.findByRole("heading", { name: "Choose your domain" });
   });
 
   it("locks Domain and Review once the site is generated", async () => {
@@ -208,7 +402,7 @@ describe("stepper", () => {
     const nav = screen.getByRole("navigation", { name: "Progress" });
 
     expect(within(nav).queryByRole("button", { name: /Domain/ })).toBeNull();
-    expect(within(nav).queryByRole("button", { name: /Review/ })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: /Price/ })).toBeNull();
     expect(within(nav).getByRole("button", { name: /Idea/ })).toBeTruthy();
   });
 });
@@ -220,7 +414,7 @@ describe("resume and locking", () => {
 
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Review your domain" });
+    await screen.findByRole("heading", { name: "Check the price" });
   });
 
   it("sends a locked step in the URL to the step the run is at", async () => {
@@ -266,7 +460,7 @@ describe("logo", () => {
     await user.click(screen.getByRole("button", { name: "Shuru" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Keep working" }));
 
-    expect(screen.getByRole("heading", { name: "Review your domain" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Check the price" })).toBeTruthy();
     expect(window.location.hash).toBe("#/run/r1/review");
   });
 
@@ -289,6 +483,6 @@ describe("logo", () => {
 
     window.history.back();
 
-    await screen.findByRole("heading", { name: "Review your domain" });
+    await screen.findByRole("heading", { name: "Check the price" });
   });
 });

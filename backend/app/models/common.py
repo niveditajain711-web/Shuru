@@ -23,3 +23,5 @@ class RunState(StrEnum):
     DOMAINS_LISTED = "domains_listed"
     DOMAIN_CHOSEN = "domain_chosen"
     SITE_GENERATED = "site_generated"
+    PURCHASING = "purchasing"  # registration accepted, GoDaddy has not finished it yet
+    PURCHASED = "purchased"

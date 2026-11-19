@@ -63,9 +63,10 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
 
   return (
     <section className="card">
-      <h1>Pick your domain</h1>
+      <h1>Choose your domain</h1>
       <p className="lead">
-        These domains are available to register. Prices are for the first year and exclude taxes and fees.
+        We wrote a short summary of your business and searched for domains to match. These domains are available to
+        register. Prices are for the first year and exclude taxes and fees.
       </p>
 
       <BusinessSummary
@@ -140,6 +141,11 @@ export function DomainStep({ run, onUpdated, onChosen }: Props) {
                 {domain.renewal_price !== null && (
                   <span className="hint">renews at {formatPrice(domain.renewal_price, domain.currency)}/yr</span>
                 )}
+                {domain.fees.map((fee) => (
+                  <span key={fee.type} className="hint premium">
+                    Premium domain: plus a one-time fee of {formatPrice(fee.amount, fee.currency)}
+                  </span>
+                ))}
               </span>
             </label>
           ))}

@@ -15,10 +15,12 @@ class RateLimiter:
         self._window = window_seconds
         self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
+        self._last_prune = time.monotonic()
 
     def allow(self, key: str) -> bool:
         now = time.monotonic()
         with self._lock:
+            self._prune(now)
             hits = self._hits[key]
             while hits and now - hits[0] > self._window:
                 hits.popleft()
@@ -26,3 +28,11 @@ class RateLimiter:
                 return False
             hits.append(now)
             return True
+
+    def _prune(self, now: float) -> None:
+        """Forget keys with no hits left in the window, so memory does not grow with every client ever seen."""
+        if now - self._last_prune < self._window:
+            return
+        self._last_prune = now
+        for key in [k for k, hits in self._hits.items() if not hits or now - hits[-1] > self._window]:
+            del self._hits[key]

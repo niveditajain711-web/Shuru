@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 from app.core.errors import RunNotFoundError
 from app.models import DomainOffer, Lang, Run, RunState
 from app.repositories.run_store import RunStore
-from tests.conftest import make_brief, make_site
+from tests.helpers import make_brief, make_site
 
 
 def make_run() -> Run:
@@ -48,3 +49,20 @@ def test_data_survives_a_new_store_instance(tmp_path):
     RunStore(tmp_path / "db.sqlite").save(make_run())
 
     assert RunStore(tmp_path / "db.sqlite").get("r1").idea == "idea"
+
+
+def test_store_adds_purchase_columns_to_an_old_database(tmp_path):
+    path = tmp_path / "old.sqlite"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE runs (id TEXT PRIMARY KEY, state TEXT NOT NULL, lang TEXT NOT NULL, idea TEXT NOT NULL, "
+        "brief TEXT NOT NULL, domains TEXT NOT NULL, domain TEXT, site TEXT, regenerations INTEGER NOT NULL, "
+        "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    RunStore(path)  # must not raise, and must add the columns
+
+    cols = {row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(runs)")}
+    assert {"quote", "purchase"} <= cols

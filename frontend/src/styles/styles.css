@@ -1015,3 +1015,33 @@ button.link:hover:not(:disabled) {
     padding: var(--space-5) var(--space-4);
   }
 }
+
+/* --- Checkout --- */
+.consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.check {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+}
+
+.hint.premium {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.summary-total {
+  font-size: 1.15rem;
+}

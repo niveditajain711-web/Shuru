@@ -19,11 +19,13 @@ function runIn(state: RunState): Run {
     brief: { audience: "a", tone: "t", tagline: "g", name_ideas: [] },
     domains: [],
     domain: null,
+    quote: null,
+    purchase: null,
     regenerations: 0,
   };
 }
 
-const ALL: Step[] = ["idea", "domain", "review", "preview"];
+const ALL: Step[] = ["idea", "domain", "review", "preview", "checkout"];
 const open = (state: RunState) => ALL.filter((step) => isStepAvailable(step, runIn(state)));
 
 describe("naturalStep", () => {
@@ -32,6 +34,8 @@ describe("naturalStep", () => {
     ["domains_listed", "domain"],
     ["domain_chosen", "review"],
     ["site_generated", "preview"],
+    ["purchasing", "checkout"],
+    ["purchased", "checkout"],
   ] as const)("%s waits at %s", (state, step) => {
     expect(naturalStep(runIn(state))).toBe(step);
   });
@@ -48,12 +52,22 @@ describe("isStepAvailable", () => {
     expect(open("domain_chosen")).toEqual(["idea", "domain", "review"]);
   });
 
-  it("locks Domain and Review once the site is generated", () => {
-    expect(open("site_generated")).toEqual(["idea", "preview"]);
+  it("locks Domain and Review once the site is generated, and opens Buy", () => {
+    expect(open("site_generated")).toEqual(["idea", "preview", "checkout"]);
+  });
+
+  it("locks everything before Buy once the domain is being bought or is bought", () => {
+    expect(open("purchasing")).toEqual(["checkout"]);
+    expect(open("purchased")).toEqual(["checkout"]);
   });
 });
 
 describe("unavailableHint", () => {
+  it("explains the lock after the purchase", () => {
+    expect(unavailableHint("preview", runIn("purchased"))).toMatch(/domain is bought/);
+    expect(unavailableHint("idea", runIn("purchased"))).toMatch(/Start over/);
+  });
+
   it("explains the lock after generation", () => {
     expect(unavailableHint("domain", runIn("site_generated"))).toMatch(/Start over/);
   });

@@ -2,18 +2,20 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from app.core.config import Settings
 from app.core.errors import (
     ConfirmationMismatchError,
     DomainNotAvailableError,
     InvalidRunStateError,
+    PurchaseFailedError,
     RegenerationLimitError,
 )
 from app.models import Lang, Run, RunState
+from app.repositories.run_store import RunStore
+from app.schemas import PurchaseRequest
 from app.services.claude_service import ClaudeService
 from app.services.domain_service import DomainService
+from app.services.purchase_service import PurchaseService
 from app.services.site_service import SiteService
-from app.repositories.run_store import RunStore
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +23,12 @@ logger = logging.getLogger(__name__)
 class Orchestrator:
     """The fixed state machine that sequences the services. Code, not Claude, controls the flow.
 
-    BRIEFED -> DOMAINS_LISTED -> DOMAIN_CHOSEN -> SITE_GENERATED
+    BRIEFED -> DOMAINS_LISTED -> DOMAIN_CHOSEN -> SITE_GENERATED -> (PURCHASING ->) PURCHASED
 
     Each step checks the run's state first and saves the new state before slow side effects where
     that lets the user retry. The user may change their mind about the domain (DOMAIN_CHOSEN back
     to DOMAINS_LISTED), but once the site is generated nothing moves backwards.
-    Nothing here can spend money.
+    Only `purchase` can spend money, and not in demo mode (see `PurchaseService`).
     """
 
     def __init__(
@@ -35,13 +37,15 @@ class Orchestrator:
         claude: ClaudeService,
         domains: DomainService,
         sites: SiteService,
-        settings: Settings,
+        purchases: PurchaseService,
+        regeneration_cap: int,
     ) -> None:
         self._store = store
         self._claude = claude
         self._domains = domains
         self._sites = sites
-        self._regeneration_cap = settings.regeneration_cap
+        self._purchases = purchases
+        self._regeneration_cap = regeneration_cap
 
     def create_run(self, idea: str, lang: Lang) -> Run:
         """Step 1: turn the idea into a brief. The run only exists once the brief is valid."""
@@ -104,7 +108,7 @@ class Orchestrator:
             logger.warning("confirmation does not match run_id=%s domain=%s price=%s", run_id, domain, price)
             raise ConfirmationMismatchError()
 
-        run.site = self._claude.generate_site(run.brief, run.domain.name)
+        run.site = self._claude.generate_site(run.brief, self._domain_name(run))
         run.state = RunState.SITE_GENERATED
         self._save(run)
         return run
@@ -116,15 +120,71 @@ class Orchestrator:
         if run.regenerations >= self._regeneration_cap:
             raise RegenerationLimitError(self._regeneration_cap)
 
-        run.site = self._claude.generate_site(run.brief, run.domain.name)
+        run.site = self._claude.generate_site(run.brief, self._domain_name(run))
         run.regenerations += 1
         self._save(run)
         return run
 
     def render_preview(self, run_id: str, lang: Lang) -> str:
         run = self._store.get(run_id)
+        self._require_state(run, RunState.SITE_GENERATED, RunState.PURCHASING, RunState.PURCHASED)
+        return self._sites.render(run.site, self._domain_name(run), lang)
+
+    def quote_purchase(self, run_id: str) -> Run:
+        """Step 5a: lock the price of the chosen domain. Free. Replaces any earlier quote."""
+        run = self._store.get(run_id)
         self._require_state(run, RunState.SITE_GENERATED)
-        return self._sites.render(run.site, run.domain.name, lang)
+
+        run.quote = self._purchases.quote(self._domain_name(run))
+        self._save(run)
+        return run
+
+    def purchase(self, run_id: str, request: PurchaseRequest) -> Run:
+        """Step 5b: the user accepted the agreements and the quoted price, so buy the domain.
+
+        What they accepted must match the stored quote exactly, and the quote must still be locked.
+        If GoDaddy has not finished yet the run becomes PURCHASING; `refresh_purchase` then checks on it.
+        """
+        run = self._store.get(run_id)
+        self._require_state(run, RunState.SITE_GENERATED)
+
+        quote = run.quote
+        if quote is None:
+            logger.warning("purchase without a quote run_id=%s", run_id)
+            raise InvalidRunStateError()
+        self._purchases.check_acceptance(quote, request)
+
+        try:
+            # The user clicked accept to send this request, so now is the time of consent.
+            run.purchase = self._purchases.buy(quote, datetime.now(UTC))
+        except PurchaseFailedError:
+            run.quote = None  # the token is spent, so the next attempt needs a new quote
+            self._save(run)
+            raise
+        return self._finish_purchase(run)
+
+    def refresh_purchase(self, run_id: str) -> Run:
+        """Check on a purchase GoDaddy had not finished. Never registers anything."""
+        run = self._store.get(run_id)
+        self._require_state(run, RunState.PURCHASING)
+        assert run.purchase is not None
+
+        run.purchase = self._purchases.refresh(run.purchase)
+        return self._finish_purchase(run)
+
+    def _finish_purchase(self, run: Run) -> Run:
+        assert run.purchase is not None
+        run.state = RunState.PURCHASED if run.purchase.status == "completed" else RunState.PURCHASING
+        self._save(run)
+        return run
+
+    @staticmethod
+    def _domain_name(run: Run) -> str:
+        """The chosen domain's name. Every state that needs one has it, so a missing one is a bug."""
+        if run.domain is None:
+            logger.error("run has no chosen domain run_id=%s state=%s", run.id, run.state)
+            raise InvalidRunStateError()
+        return run.domain.name
 
     def _save(self, run: Run) -> None:
         run.updated_at = datetime.now(UTC)

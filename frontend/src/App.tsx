@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Run } from "./api/types";
 import { ConfirmDialog } from "./components/dialogs/ConfirmDialog";
+import { CheckoutStep } from "./components/steps/CheckoutStep";
 import { DomainStep } from "./components/steps/DomainStep";
 import { ErrorMessage } from "./components/ui/ErrorMessage";
 import { IdeaStep } from "./components/steps/IdeaStep";
@@ -99,7 +100,7 @@ export function App() {
         return (
           <IdeaStep
             run={activeRun}
-            onCreated={(created) => updateRun(created, "idea")}
+            onCreated={(created) => updateRun(created, "domain")}
             onContinue={() => activeRun && navigate(activeRun.id, naturalStep(activeRun))}
           />
         );
@@ -120,7 +121,27 @@ export function App() {
           )
         );
       case "preview":
-        return activeRun && <PreviewStep run={activeRun} onUpdated={updateRun} onStartOver={requestStartOver} />;
+        return (
+          activeRun && (
+            <PreviewStep
+              run={activeRun}
+              onUpdated={updateRun}
+              onBuy={() => navigate(activeRun.id, "checkout")}
+              onStartOver={requestStartOver}
+            />
+          )
+        );
+      case "checkout":
+        return (
+          activeRun && (
+            <CheckoutStep
+              run={activeRun}
+              onUpdated={updateRun}
+              onBack={() => navigate(activeRun.id, "preview")}
+              onStartOver={requestStartOver}
+            />
+          )
+        );
     }
   }
 
@@ -142,7 +163,7 @@ export function App() {
           </button>
         </div>
       </header>
-      <div className={step === "preview" && activeRun ? "page page-wide" : "page"}>
+      <div className={activeRun && (step === "preview" || activeRun.state === "purchased") ? "page page-wide" : "page"}>
         <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
         <main ref={main}>{renderStep()}</main>
       </div>

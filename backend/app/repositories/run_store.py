@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from app.core.errors import RunNotFoundError
-from app.models import Brief, DomainOffer, Run, SiteContent
+from app.models import Brief, DomainOffer, LockedQuote, Purchase, Run, SiteContent
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS runs (
     domains TEXT NOT NULL,
     domain TEXT,
     site TEXT,
+    quote TEXT,
+    purchase TEXT,
     regenerations INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -39,6 +41,11 @@ class RunStore:
         with self._connect() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(_SCHEMA)
+            # Databases created before the purchase flow lack these columns.
+            existing = {row["name"] for row in conn.execute("PRAGMA table_info(runs)")}
+            for column in ("quote", "purchase"):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE runs ADD COLUMN {column} TEXT")
 
     @contextlib.contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -56,12 +63,13 @@ class RunStore:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO runs (id, state, lang, idea, brief, domains, domain, site,
+                INSERT INTO runs (id, state, lang, idea, brief, domains, domain, site, quote, purchase,
                                   regenerations, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     state=excluded.state, domains=excluded.domains, domain=excluded.domain,
-                    site=excluded.site, regenerations=excluded.regenerations,
+                    site=excluded.site, quote=excluded.quote, purchase=excluded.purchase,
+                    regenerations=excluded.regenerations,
                     updated_at=excluded.updated_at
                 """,
                 (
@@ -73,6 +81,8 @@ class RunStore:
                     _DOMAINS.dump_json(run.domains).decode(),
                     run.domain.model_dump_json() if run.domain else None,
                     run.site.model_dump_json() if run.site else None,
+                    run.quote.model_dump_json() if run.quote else None,
+                    run.purchase.model_dump_json() if run.purchase else None,
                     run.regenerations,
                     run.created_at.isoformat(),
                     run.updated_at.isoformat(),
@@ -94,6 +104,8 @@ class RunStore:
             domains=_DOMAINS.validate_json(row["domains"]),
             domain=DomainOffer.model_validate_json(row["domain"]) if row["domain"] else None,
             site=SiteContent.model_validate_json(row["site"]) if row["site"] else None,
+            quote=LockedQuote.model_validate_json(row["quote"]) if row["quote"] else None,
+            purchase=Purchase.model_validate_json(row["purchase"]) if row["purchase"] else None,
             regenerations=row["regenerations"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

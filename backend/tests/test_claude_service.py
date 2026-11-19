@@ -9,7 +9,7 @@ from app.core.config import Settings
 from app.core.errors import ClaudeError
 from app.models import Lang
 from app.services.claude_service import ClaudeService
-from tests.conftest import NAME_IDEAS, make_brief, make_site
+from tests.helpers import NAME_IDEAS, make_brief, make_site
 
 VALID_BRIEF = {
     "audience": "Home cooks",

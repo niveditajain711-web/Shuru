@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { api } from "../../api/client";
 import type { Lang, Run } from "../../api/types";
 import { useAction } from "../../hooks/useAction";
+import { naturalStep } from "../../lib/navigation";
+import { BusinessSummary } from "../ui/BusinessSummary";
 import { ErrorMessage } from "../ui/ErrorMessage";
 import { Loading } from "../ui/Loading";
 import { Segmented } from "../ui/Segmented";
@@ -38,14 +40,14 @@ export function IdeaStep({ run, onCreated, onContinue }: Props) {
   }
 
   if (run) {
-    return <BriefView run={run} onContinue={onContinue} />;
+    return <IdeaView run={run} onContinue={onContinue} />;
   }
 
   return (
     <form className="card" onSubmit={handleSubmit}>
       <h1>What's your business idea?</h1>
       <p className="lead">
-        Describe it in one sentence. We'll write a short summary of your business and suggest domain names to match.
+        Describe it in one sentence. We'll write a short summary of your business and find domain names to match.
       </p>
 
       <div className="field">
@@ -100,43 +102,30 @@ export function IdeaStep({ run, onCreated, onContinue }: Props) {
   );
 }
 
-function BriefView({ run, onContinue }: { run: Run; onContinue: () => void }) {
-  const { brief } = run;
-  const label = run.state === "briefed" ? "Find domains" : "Continue";
+/** The idea of a run that already exists. It cannot be changed: the summary and domains were made from it. */
+function IdeaView({ run, onContinue }: { run: Run; onContinue: () => void }) {
+  const continueLabel = {
+    idea: "Continue",
+    domain: "Back to domains",
+    review: "Back to the price",
+    preview: "Back to your site",
+    checkout: "Continue",
+  }[naturalStep(run)];
   return (
     <section className="card">
-      <h1>Your business summary</h1>
-      <p className="lead">Here's what we understood. Next we'll look for domains that fit.</p>
+      <h1>Your idea</h1>
+      <p className="lead">Your idea is saved. To change it, start a new site.</p>
 
       <blockquote className="tagline" lang={run.lang}>
-        {brief.tagline}
+        {run.idea}
       </blockquote>
+      <p className="hint">Website language: {run.lang === "en" ? "English" : <span lang="hi">हिन्दी</span>}</p>
 
-      <dl className="facts">
-        <div>
-          <dt>Audience</dt>
-          <dd lang={run.lang}>{brief.audience}</dd>
-        </div>
-        <div>
-          <dt>Tone</dt>
-          <dd lang={run.lang}>{brief.tone}</dd>
-        </div>
-      </dl>
-
-      <div>
-        <h2>Name ideas</h2>
-        <ul className="chips">
-          {brief.name_ideas.map((name) => (
-            <li key={name} className="chip">
-              {name}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <BusinessSummary run={run} />
 
       <div className="actions">
         <button type="button" onClick={onContinue}>
-          {label}
+          {continueLabel}
         </button>
       </div>
     </section>
