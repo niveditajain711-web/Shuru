@@ -69,17 +69,6 @@ Troubleshooting: `Permission denied (publickey)` means the wrong user or the pub
 Run on the server.
 
 ```bash
-# Update, then create a non-root user for deployments
-sudo apt-get update && sudo apt-get -y upgrade
-adduser deploy                       # choose a strong password
-usermod -aG sudo deploy
-rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy   # lets you SSH in as deploy with the same key
-
-# Firewall: allow SSH first, then web, then enable
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443
-sudo ufw enable
 
 # Install Docker Engine and the compose plugin (official repository)
 sudo apt-get install -y ca-certificates curl
@@ -89,10 +78,7 @@ sudo chmod a+r /etc/apt/keyrings/docker.asc
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker deploy
 ```
-
-Log out and back in as `deploy` (`ssh deploy@<server-ip>`), then check `docker run --rm hello-world` and `docker compose version`. Do not publish any other ports (such as 8000): Docker bypasses `ufw` for published ports.
 
 ### 3. Point shuru.biz at the server
 
