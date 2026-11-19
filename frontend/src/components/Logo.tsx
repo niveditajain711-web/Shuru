@@ -1,4 +1,4 @@
-/** The Shuru brand: a green tile with a "start" arrow, the wordmark, a turmeric dot, and "शुरू" (Hindi for "start"). */
+/** The Shuru brand: a brand-colour tile with a "start" arrow, the wordmark, a turmeric dot, and "शुरू" (Hindi for "start"). */
 export function Logo() {
   return (
     <>
@@ -13,14 +13,16 @@ export function Logo() {
           strokeLinejoin="round"
         />
       </svg>
-      <span className="logo-word">
-        Shuru
-        <span className="logo-dot" aria-hidden="true">
-          .
+      <span className="logo-text">
+        <span className="logo-word">
+          Shuru
+          <span className="logo-dot" aria-hidden="true">
+            .
+          </span>
         </span>
-      </span>
-      <span className="logo-hindi" lang="hi" aria-hidden="true">
-        शुरू
+        <span className="logo-hindi" lang="hi" aria-hidden="true">
+          शुरू
+        </span>
       </span>
     </>
   );

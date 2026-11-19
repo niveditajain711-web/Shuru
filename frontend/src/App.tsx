@@ -125,9 +125,9 @@ export function App() {
   }
 
   return (
-    <div className="page">
-      <header className="site-header">
-        <div className="header-top">
+    <>
+      <header className="app-bar">
+        <div className="app-bar-inner">
           <button type="button" className="logo" title="Start a new site" onClick={requestStartOver}>
             <Logo />
           </button>
@@ -141,9 +141,11 @@ export function App() {
             <span className="nav-link-label">Support</span>
           </button>
         </div>
-        <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
       </header>
-      <main ref={main}>{renderStep()}</main>
+      <div className={step === "preview" && activeRun ? "page page-wide" : "page"}>
+        <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
+        <main ref={main}>{renderStep()}</main>
+      </div>
       <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       <ConfirmDialog
@@ -156,6 +158,6 @@ export function App() {
       >
         <p>Your current site stays saved. You can return to it with the browser Back button or its link.</p>
       </ConfirmDialog>
-    </div>
+    </>
   );
 }

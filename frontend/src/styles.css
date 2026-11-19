@@ -1,22 +1,27 @@
 /* --- Design tokens --- */
 :root {
-  --ink: #1f2933;
-  --muted: #3e4c59;
-  --placeholder: #5b6773;
-  --accent: #1d6f5f;
-  --accent-strong: #15564a;
-  --accent-soft: #e3f1ee;
-  --accent-ink: #ffffff;
-  /* One warm accent, used sparingly for highlights. Never as text on white (2.2:1); use fills with dark text. */
-  --turmeric: #e9a23b;
-  --turmeric-soft: #fdf1d9;
-  --border: #d5dde0;
-  --bg: #f4f7f6;
+  /* Palette "Indigo & Saffron". Swap this block to re-theme every page. */
+  --primary: #4338ca;
+  --primary-strong: #3730a3;
+  --primary-soft: #eef2ff;
+  --on-primary: #ffffff;
+  /* Warm highlight, used sparingly. Fills with dark text only, never as text on white. */
+  --highlight: #e9a23b;
+  --highlight-soft: #fdf1d9;
+  --ink: #1e293b;
+  --muted: #475569;
+  --placeholder: #64748b;
+  --bg: #f8fafc;
   --surface: #ffffff;
+  --border: #cbd5e1;
+  /* Input and control outlines: at least 3:1 against the surface (WCAG 1.4.11). */
+  --border-strong: #7c8ba1;
+  --focus: var(--primary);
   --danger: #b42318;
   --danger-soft: #fdecea;
   --notice-soft: #fff7e0;
   --notice-border: #e6c453;
+  --shadow-color: 30, 41, 59;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -24,14 +29,23 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 48px;
 
-  --radius: 10px;
-  --radius-small: 6px;
-  --shadow: 0 1px 2px rgba(31, 41, 51, 0.06), 0 4px 12px rgba(31, 41, 51, 0.06);
+  --page: 760px;
+  --page-wide: 1100px;
+  --gutter: var(--space-4);
+
+  --radius: 12px;
+  --radius-small: 8px;
+  --shadow: 0 1px 2px rgba(var(--shadow-color), 0.05), 0 4px 16px rgba(var(--shadow-color), 0.06);
+  --shadow-raised: 0 2px 4px rgba(var(--shadow-color), 0.06), 0 12px 32px rgba(var(--shadow-color), 0.12);
+  --transition: 150ms ease;
 
   --text-small: 0.875rem;
+  --text-base: 1rem;
   --text-large: 1.125rem;
   --text-title: 1.75rem;
+  --control-height: 44px;
 }
 
 * {
@@ -43,44 +57,73 @@ body {
   color: var(--ink);
   background: var(--bg);
   font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans Devanagari", sans-serif;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
+/* One column per page. The app bar, the stepper and the card share the same gutters, so their edges line up. */
 .page {
-  max-width: 760px;
+  max-width: var(--page);
   margin: 0 auto;
-  padding: var(--space-5) var(--space-4) var(--space-6);
+  padding: var(--space-5) var(--gutter) var(--space-7);
 }
 
-/* --- Header and logo --- */
-.site-header {
+/* The Preview step needs room for a desktop-sized frame. */
+.page-wide {
+  max-width: var(--page-wide);
+}
+
+/* --- App bar: logo and Support, in the same place on every page --- */
+.app-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-bar-inner {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: var(--page-wide);
+  min-height: 64px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--gutter);
 }
 
-.logo {
+button.logo {
   display: inline-flex;
   align-items: center;
-  align-self: flex-start;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  color: var(--accent);
+  min-height: 0;
+  padding: var(--space-1);
+  /* Pull back by the padding so the tile's left edge sits on the gutter. */
+  margin-left: calc(-1 * var(--space-1));
+  color: var(--primary);
   background: none;
+  border: 0;
   border-radius: var(--radius-small);
 }
 
-.logo:hover:not(:disabled) {
+button.logo:hover:not(:disabled) {
   background: none;
 }
 
-.logo:hover:not(:disabled) .logo-mark {
-  color: var(--accent-strong);
+button.logo:hover:not(:disabled) .logo-mark {
+  color: var(--primary-strong);
 }
 
 .logo-mark {
   flex: none;
+  display: block;
+}
+
+/* Latin wordmark and Devanagari share one baseline instead of being box-centred. */
+.logo-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
 }
 
 .logo-word {
@@ -92,18 +135,26 @@ body {
 }
 
 .logo-dot {
-  color: var(--turmeric);
+  color: var(--highlight);
 }
 
 .logo-hindi {
   padding-left: var(--space-2);
   font-size: var(--text-small);
   font-weight: 500;
+  line-height: 1;
   color: var(--muted);
   border-left: 1px solid var(--border);
 }
 
 /* --- Stepper --- */
+.stepper {
+  --marker: 28px;
+  --marker-gap: 6px;
+  max-width: 560px;
+  margin: 0 auto var(--space-5);
+}
+
 .stepper ol {
   display: flex;
   margin: 0;
@@ -116,30 +167,36 @@ body {
   flex: 1;
 }
 
+/* Connector: vertically centred on the marker, with an equal gap on both sides. */
 .step:not(:last-child)::after {
   content: "";
   position: absolute;
-  top: 14px;
-  left: calc(50% + 20px);
-  right: calc(-50% + 20px);
+  top: calc(var(--marker) / 2 - 1px);
+  left: calc(50% + var(--marker) / 2 + var(--marker-gap));
+  right: calc(-50% + var(--marker) / 2 + var(--marker-gap));
   height: 2px;
   background: var(--border);
+  border-radius: 1px;
+  transition: background-color var(--transition);
 }
 
 .step.done:not(:last-child)::after {
-  background: var(--accent);
+  background: var(--primary);
 }
 
 .step-button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   width: 100%;
+  min-height: 0;
   padding: 0;
   font: inherit;
   font-size: var(--text-small);
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
   color: var(--muted);
   background: none;
   border: 0;
@@ -152,42 +209,53 @@ button.step-button {
 
 button.step-button:hover .step-label {
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 button.step-button:hover:not(:disabled) {
   background: none;
 }
 
+button.step-button:hover .step-marker {
+  box-shadow: 0 0 0 4px var(--primary-soft);
+}
+
 .step-marker {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: var(--marker);
+  height: var(--marker);
   font-size: var(--text-small);
+  font-weight: 700;
+  line-height: 1;
   color: var(--muted);
   background: var(--surface);
   border: 2px solid var(--border);
   border-radius: 50%;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
 }
 
 .step.done .step-marker {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--on-primary);
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .step.next .step-marker {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .step.current .step-marker {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--on-primary);
+  background: var(--primary);
+  border-color: var(--primary);
   box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--turmeric);
+    0 0 0 3px var(--surface),
+    0 0 0 5px var(--highlight);
 }
 
 .step.current .step-button,
@@ -203,8 +271,10 @@ span.step-button {
 
 .step-count {
   display: none;
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-3);
   font-size: var(--text-small);
+  font-weight: 600;
+  text-align: center;
   color: var(--muted);
 }
 
@@ -235,9 +305,8 @@ span.step-button {
     white-space: nowrap;
   }
 
-  .step:not(:last-child)::after {
-    left: calc(50% + 18px);
-    right: calc(-50% + 18px);
+  .stepper {
+    --marker-gap: 4px;
   }
 }
 
@@ -246,17 +315,25 @@ span.step-button {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
+  padding: var(--space-6);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
 
+h1,
+h2 {
+  color: var(--ink);
+  text-wrap: balance;
+}
+
 h1 {
   margin: 0;
   font-size: var(--text-title);
+  font-weight: 700;
   line-height: 1.2;
+  letter-spacing: -0.015em;
 }
 
 h1:focus {
@@ -266,6 +343,8 @@ h1:focus {
 h2 {
   margin: 0 0 var(--space-2);
   font-size: var(--text-large);
+  font-weight: 650;
+  line-height: 1.3;
 }
 
 p {
@@ -273,7 +352,10 @@ p {
 }
 
 .lead {
+  max-width: 60ch;
+  font-size: 1.0625rem;
   color: var(--muted);
+  text-wrap: pretty;
 }
 
 .hint {
@@ -298,8 +380,8 @@ p {
   padding: var(--space-3) var(--space-4);
   font-size: var(--text-large);
   font-weight: 600;
-  background: var(--turmeric-soft);
-  border-left: 4px solid var(--turmeric);
+  background: var(--highlight-soft);
+  border-left: 4px solid var(--highlight);
   border-radius: var(--radius-small);
 }
 
@@ -308,8 +390,8 @@ p {
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  background: var(--turmeric-soft);
-  border-left: 4px solid var(--turmeric);
+  background: var(--highlight-soft);
+  border-left: 4px solid var(--highlight);
   border-radius: var(--radius-small);
 }
 
@@ -322,15 +404,15 @@ p {
 }
 
 .business-summary button.chip[aria-pressed="true"] {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--on-primary);
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .business-summary details summary {
   font-size: var(--text-small);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--primary);
   cursor: pointer;
 }
 
@@ -348,6 +430,8 @@ p {
 .facts dt {
   font-size: var(--text-small);
   font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -370,11 +454,34 @@ label,
 textarea,
 input {
   width: 100%;
+  min-height: var(--control-height);
   padding: var(--space-2) var(--space-3);
   font: inherit;
+  color: var(--ink);
   background: var(--surface);
-  border: 1px solid #aeb9bf;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-small);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+textarea:hover:not(:disabled),
+input:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+/* Text fields get a soft ring on focus instead of the global outline. */
+textarea:focus-visible,
+input:not([type="radio"], [type="checkbox"]):focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft), 0 0 0 1px var(--primary) inset;
+}
+
+textarea:disabled,
+input:disabled {
+  background: var(--bg);
 }
 
 textarea {
@@ -403,28 +510,43 @@ textarea {
 
 /* --- Buttons --- */
 button {
-  padding: var(--space-2) var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  padding: var(--space-2) var(--space-5);
   font: inherit;
   font-weight: 600;
-  color: var(--accent-ink);
-  background: var(--accent);
+  line-height: 1.25;
+  color: var(--on-primary);
+  background: var(--primary);
   border: 1px solid transparent;
   border-radius: var(--radius-small);
   cursor: pointer;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
 }
 
 button:hover:not(:disabled) {
-  background: var(--accent-strong);
+  background: var(--primary-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button.secondary {
-  color: var(--accent);
+  color: var(--primary);
   background: var(--surface);
-  border-color: var(--accent);
+  border-color: var(--primary);
 }
 
 button.secondary:hover:not(:disabled) {
-  background: var(--accent-soft);
+  background: var(--primary-soft);
 }
 
 button:disabled {
@@ -435,11 +557,13 @@ button:disabled {
 .actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-3);
 }
 
+/* Visible on every background: the old yellow ring was under 2:1 on white. */
 :focus-visible {
-  outline: 3px solid #f2b705;
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -454,6 +578,8 @@ button:disabled {
 }
 
 .chip {
+  display: inline-block;
+  min-height: 0;
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-small);
   font-weight: 500;
@@ -469,33 +595,38 @@ button.chip {
 }
 
 button.chip:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: var(--accent);
+  background: var(--primary-soft);
+  border-color: var(--primary);
 }
 
 /* --- Segmented control (language) --- */
 .segmented {
   display: inline-flex;
   align-self: flex-start;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--primary);
   border-radius: var(--radius-small);
   overflow: hidden;
 }
 
 .segmented button {
-  color: var(--accent);
+  padding-inline: var(--space-4);
+  color: var(--primary);
   background: var(--surface);
   border: 0;
   border-radius: 0;
 }
 
 .segmented button:hover:not(:disabled) {
-  background: var(--accent-soft);
+  background: var(--primary-soft);
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--primary);
 }
 
 .segmented button[aria-pressed="true"] {
-  color: var(--accent-ink);
-  background: var(--accent);
+  color: var(--on-primary);
+  background: var(--primary);
 }
 
 /* --- Domain list --- */
@@ -528,20 +659,33 @@ legend {
   cursor: pointer;
 }
 
+.domain-card {
+  transition:
+    border-color var(--transition),
+    background-color var(--transition),
+    box-shadow var(--transition);
+}
+
 .domain-card:hover {
-  border-color: var(--accent);
+  border-color: var(--primary);
+}
+
+/* The radio is small; ring the whole card when it has keyboard focus. */
+.domain-card:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .domain-card:has(input:checked) {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
 }
 
 .domain-card input {
   width: auto;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--primary);
 }
 
 .domain-name {
@@ -560,8 +704,8 @@ legend {
 /* --- Review --- */
 .summary {
   padding: var(--space-4) var(--space-5);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
   border-radius: var(--radius);
 }
 
@@ -584,43 +728,40 @@ legend {
 }
 
 /* --- Preview --- */
-/* The Preview step is wider than the others. The header keeps its normal width and stays centered. */
-.page:has(.preview-card) {
-  max-width: 1100px;
-}
-
-.page:has(.preview-card) .site-header {
-  max-width: 760px;
-  margin-inline: auto;
-}
-
 .toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
 }
 
 .preview {
+  display: block;
   width: 100%;
   height: clamp(480px, 70vh, 760px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
+  box-shadow: 0 1px 2px rgba(var(--shadow-color), 0.05);
 }
 
-/* Phone-sized frame: the same page, narrower, so its responsive layout shows. */
+/* Phone-sized frame: the same page, narrower, so its responsive layout shows. Centred in the card. */
 .preview.mobile {
   align-self: center;
   width: 390px;
   max-width: 100%;
-  border-radius: 20px;
+  height: min(760px, 75vh);
+  border: 8px solid var(--ink);
+  border-radius: 28px;
 }
 
 .next-panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding-top: var(--space-4);
+  margin-top: var(--space-2);
+  padding-top: var(--space-5);
   border-top: 1px solid var(--border);
 }
 
@@ -643,7 +784,7 @@ legend {
   width: 22px;
   height: 22px;
   border: 3px solid var(--border);
-  border-top-color: var(--accent);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -662,7 +803,7 @@ legend {
 
 .skeleton {
   height: 56px;
-  background: linear-gradient(90deg, #e8eeed 25%, #f4f7f6 50%, #e8eeed 75%);
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
   border-radius: var(--radius-small);
   animation: shimmer 1.4s ease-in-out infinite;
@@ -678,6 +819,12 @@ legend {
   .spinner,
   .skeleton {
     animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
   }
 }
 
@@ -704,11 +851,11 @@ dialog {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-raised);
 }
 
 dialog::backdrop {
-  background: rgba(31, 41, 51, 0.5);
+  background: rgba(var(--shadow-color), 0.5);
 }
 
 dialog h2 {
@@ -721,11 +868,28 @@ dialog .actions {
 
 @media (max-width: 600px) {
   .card {
-    padding: var(--space-4);
+    padding: var(--space-5) var(--space-4);
   }
 
   h1 {
     font-size: 1.5rem;
+  }
+
+  .app-bar-inner {
+    min-height: 56px;
+  }
+
+  /* Full-width primary actions are easier to tap. */
+  .actions > button {
+    flex: 1 1 auto;
+  }
+
+  .toolbar .segmented {
+    flex: 1 1 auto;
+  }
+
+  .toolbar .segmented button {
+    flex: 1;
   }
 
   .domain-card {
@@ -743,27 +907,20 @@ dialog .actions {
 }
 
 /* --- Support link and modal --- */
-.header-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-/* A quiet text link in the header: same green, no fill. */
+/* A quiet text link in the app bar, in the brand colour with no fill. */
 button.nav-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  color: var(--accent);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  /* Pull back by the padding so the icon's right edge sits on the gutter, mirroring the logo. */
+  margin-right: calc(-1 * var(--space-3));
+  color: var(--primary);
   background: none;
   border-color: transparent;
 }
 
 button.nav-link:hover:not(:disabled) {
-  color: var(--accent-strong);
-  background: var(--accent-soft);
+  color: var(--primary-strong);
+  background: var(--primary-soft);
 }
 
 dialog.support-dialog {
@@ -796,8 +953,10 @@ dialog.support-dialog {
 }
 
 button.icon-button {
-  display: inline-flex;
-  padding: var(--space-1);
+  min-height: 40px;
+  min-width: 40px;
+  padding: var(--space-2);
+  margin-right: calc(-1 * var(--space-2));
   color: var(--muted);
   background: none;
   border-color: transparent;
@@ -805,20 +964,22 @@ button.icon-button {
 
 button.icon-button:hover:not(:disabled) {
   color: var(--ink);
-  background: var(--accent-soft);
+  background: var(--primary-soft);
 }
 
 /* A button that reads as a text link, for the quiet secondary action. */
 button.link {
+  min-height: 0;
   padding-inline: var(--space-1);
-  color: var(--accent);
+  text-underline-offset: 3px;
+  color: var(--primary);
   text-decoration: underline;
   background: none;
   border-color: transparent;
 }
 
 button.link:hover:not(:disabled) {
-  color: var(--accent-strong);
+  color: var(--primary-strong);
   background: none;
 }
 
