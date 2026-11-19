@@ -1,27 +1,27 @@
 /* --- Design tokens --- */
 :root {
-  /* Palette "Indigo & Saffron". Swap this block to re-theme every page. */
-  --primary: #4338ca;
-  --primary-strong: #3730a3;
-  --primary-soft: #eef2ff;
+  /* Palette: swap this block to re-theme every page. */
+  --primary: #1d6f5f;
+  --primary-strong: #15564a;
+  --primary-soft: #e3f1ee;
   --on-primary: #ffffff;
   /* Warm highlight, used sparingly. Fills with dark text only, never as text on white. */
   --highlight: #e9a23b;
   --highlight-soft: #fdf1d9;
-  --ink: #1e293b;
-  --muted: #475569;
-  --placeholder: #64748b;
-  --bg: #f8fafc;
+  --ink: #1f2933;
+  --muted: #3e4c59;
+  --placeholder: #5b6773;
+  --bg: #f4f7f6;
   --surface: #ffffff;
-  --border: #cbd5e1;
+  --border: #d5dde0;
   /* Input and control outlines: at least 3:1 against the surface (WCAG 1.4.11). */
-  --border-strong: #7c8ba1;
+  --border-strong: #8a979f;
   --focus: var(--primary);
   --danger: #b42318;
   --danger-soft: #fdecea;
   --notice-soft: #fff7e0;
   --notice-border: #e6c453;
-  --shadow-color: 30, 41, 59;
+  --shadow-color: 31, 41, 51;
 
   --space-1: 4px;
   --space-2: 8px;
