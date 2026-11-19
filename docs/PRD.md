@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Draft v0.4 |
+| **Status** | Draft v0.5 |
 | **Scope** | Hackathon MVP, solo build, 5 days, $100 in Claude credits |
 | **Stack** | Python (FastAPI), React (Vite), Anthropic Python SDK (with tool use for the agent steps), GoDaddy v3 REST API (`gddy` CLI later for hosting only) |
 | **Runs on** | GoDaddy Gen4 Linux VPS with Docker, at shuru.biz (decided) |
@@ -60,12 +60,13 @@ These replace the earlier open questions. Change any that are wrong.
 - **Abuse limits:** each client may start 10 runs per hour (`POST /api/runs`, built) and send 5 contact messages per hour, because each run costs a Claude call.
 - **Contact form and mailbox:** Shuru has one GoDaddy Titan mailbox (`nivedita.jain@shuru.biz`, Pro Light plan, created with the `gddy` CLI). The wizard page has a "Contact us" form (name, email, message) whose messages the backend emails to that mailbox over SMTP. The SMTP host is GoDaddy's `smtpout.secureserver.net` (port 465, or 587 with STARTTLS), not `smtp.titan.email`, and the username is the full email address. The mailbox password is **only** in the environment (`SHURU_SMTP_PASSWORD`: gitignored `backend/.env` locally, a secret or env file on the VPS), never in code, the repo, the image or the browser. Sites Shuru generates do not get contact forms yet (their `contact` section is display text only).
 - **GoDaddy hosting plan:** the account has one, so GoDaddy Hosting is the default publishing target and the static-host fallback is only for failures.
-- **Approval** is the Approve click on step 4, with no separate authentication.
-- **GoDaddy access:** REST calls with the PAT as a Bearer token. Read-only calls (suggest, availability) and money-moving calls (quote, purchase) have separate base URLs. The test environment is `https://api.ote-godaddy.com`; its `/suggestions` returned an empty body when tried, so reads may use production while purchases stay on the test environment. Prices come back as integer minor units (`919` = $9.19).
+- **Approval** is the Approve click on step 4, with no separate authentication. Until Approve exists, the Buy step's agreement ticks and confirm button are the approval for the purchase.
+- **Demo mode for the purchase:** `SHURU_DEMO_MODE` defaults to on. The quote is real, `POST /registrations` is skipped, and the UI says nothing is charged. This lets the whole flow be shown and tested without buying a domain. A real purchase needs `SHURU_DEMO_MODE=false`. The price and consent shown are never faked: the price is always the real quote.
+- **GoDaddy access:** REST calls with the PAT as a Bearer token. Read-only calls (suggest, availability) and money-moving calls (quote, purchase) have separate base URLs (`SHURU_GDDY_READ_BASE_URL`, `SHURU_GDDY_PURCHASE_BASE_URL`; both default to production today). The test environment is `https://api.ote-godaddy.com`; its `/suggestions` returned an empty body when tried. A quote token only works in the environment that issued it, so the quote and the registration always share one base URL. Prices come back as integer minor units (`919` = $9.19).
 - **Availability policy:** suggestions are trusted as available; one accurate availability check runs on the chosen domain; the quote is the authoritative check.
 - **Cost transparency before generation:** after choosing a domain the user sees first-year price, renewal price and a "taxes and fees not included" note, and must confirm before Claude generates the site.
 - **Template** is neutral; no brand styling required.
-- **UI decisions:** the logo starts a fresh run (with confirmation); Preview is locked once generated, with "Start over"; navigation is stored in the URL hash.
+- **UI decisions:** the logo starts a fresh run (with confirmation); the domain is locked once the site is generated (Preview and Buy stay open, with "Start over"); navigation is stored in the URL hash.
 
 Still to verify: before the hosting step, that the backend host can install `gddy` (see section 9).
 
@@ -77,6 +78,8 @@ Still to verify: before the hosting step, that the backend host can install `gdd
 | 2 | Pick domain | Watches the scout's progress, chooses a domain, reviews its cost, confirms (**gate 1**) | Domain scout agent (read-only tools), accurate re-check of the chosen domain, then (after confirmation) Claude call 2 |
 | 3 | Preview site | Reads site, toggles language, may regenerate | Site JSON rendered in template |
 | 4 | Confirm and launch | Reviews domain, price, preview; clicks **Approve** (**gate 2**) | Quote, purchase, package, publish, DNS, then Claude call 3: launch kit |
+
+Step 4 is built in slices. **Built so far: the Buy step (quote and purchase), in demo mode by default** (see "Step 4a"). Package, publish, DNS and the launch kit are still planned.
 
 ## 5. Functional requirements
 
@@ -126,6 +129,18 @@ This agent replaces the fixed "first few names" search with Claude doing the leg
 - One HTML template renders the JSON and is the only source of layout and style.
 - Live preview in the wizard, language toggle, regenerate (capped).
 
+### Step 4a: Buy the domain (built)
+
+A fifth wizard step, **Buy**, opens from the Preview screen's **Buy domain** button. It is the first slice of step 4 and the point where the user approves the money, so it works as the purchase part of gate 2. When hosting and DNS are built, this approval is extended to cover them (see step 4).
+
+1. **Quote.** On opening, `POST /registration-quotes` locks the price (free). The screen shows the domain, price for the period, any premium-domain fee, renewal price, when the lock ends, and the note that ICANN fees and taxes are added at purchase. If the price differs from the one shown at cost review, say so.
+2. **Agreements.** List the agreements the quote requires, each linking to its full text. The Buy button stays disabled until the user ticks "I have read and agree". A premium domain has a second tick for its one-time fee.
+3. **Purchase.** Only after those ticks, and only if the quote is still locked, `POST /registrations` is called with the quote token, the accepted agreements and the time of consent. The server rejects the purchase if the accepted agreements or price do not match the stored quote.
+4. **Outcome.** A completed purchase shows a confirmation and the user's generated site: the site in a frame with an English/Hindi switch, and an **Open your site in a new tab** link. It says plainly that putting the site live on the domain comes next, because hosting is not built yet. The only action left is **Start a new site**. If GoDaddy has not finished within about 30 seconds the run is `purchasing` and the screen offers **Check status**, which only checks and never buys again. A failed registration drops the used quote and the user gets a new one.
+5. **Expiry and refresh.** The quote lasts about 10 minutes. A stale or expired quote is replaced when the screen opens, and **Get the current price** fetches a new one at any time.
+
+**Demo mode** (`SHURU_DEMO_MODE`, default **on**). The quote is still real and free, but `POST /registrations` is never called, so nothing is registered or charged. The Buy screen and the confirmation say so ("Demo mode: no domain will be registered and nothing will be charged", "(not charged)"), the button reads **Complete demo purchase**, and the recorded purchase is marked as a demo. Real purchases need an explicit `SHURU_DEMO_MODE=false`. Because there are no user accounts yet, anyone holding a run's link can complete a real purchase, so demo mode stays on until accounts or the Approve gate exist. Demo mode needs a payment method and registrant contact on the GoDaddy account, because the quote checks them.
+
 ### Step 4: Confirm and launch
 
 The only step that spends money or changes external state. In order:
@@ -153,14 +168,16 @@ The only step that spends money or changes external state. In order:
 
 ### Navigation and screen design
 
-- **Stepper.** A header stepper shows Idea, Domain, Review and Preview (and Launch, once step 4 is built) as done, current or upcoming. Finished steps that are still open are clickable. Locked or not-yet-reached steps are disabled and say why ("Choose a domain first", "Locked once your site is written. Start over to change it"). On phones it shows "Step N of 4" and the current label only.
+- **Stepper.** A header stepper shows Idea, Domain, Review, Preview and Buy (and Launch, once hosting is built) as done, current or upcoming. Finished steps that are still open are clickable. Locked or not-yet-reached steps are disabled and say why ("Choose a domain first", "Locked once your site is written. Start over to change it"). On phones it shows "Step N of 5" and the current label only.
 - **Logo.** Clicking the Shuru logo starts a fresh run. If there is progress, a confirmation explains that the current site stays saved and can be reopened with the browser Back button or its link.
 - **Resume.** The run and step are in the URL (`#/run/{id}/{step}`). Refresh, a pasted link and the browser Back button reopen the right step.
-- **Locked after generation.** Once the site is generated, the domain cannot be changed. Domain and Review are locked; Idea (read-only summary) and Preview stay open. Preview offers **Start over** for a new site.
+- **Locked after generation.** Once the site is generated, the domain cannot be changed. Domain and Review are locked; Idea (read-only summary), Preview and Buy stay open. Preview offers **Buy domain** and **Start over**.
+- **Locked after purchase.** Once the domain purchase has started (`purchasing`) or finished (`purchased`), every step before Buy is locked, including Idea and Preview, and the stepper says why ("Locked once your domain is bought. Start over to make a new site."). Only Buy stays open, and **Start a new site** is the only action. A URL for a locked step is replaced by Buy. The backend enforces the same rule.
 - **Idea screen:** one-line intro, a 0 to 500 character counter, clickable example ideas, an English/Hindi switch, and a friendly summary (tagline, audience, tone, name-idea chips).
 - **Domain screen:** a compact business reminder at the top (tagline, the name ideas as tappable chips, and audience and tone folded away under "More about your business"). Tapping a name idea searches for it; tapping it again returns to the default suggestions. Then a "Looking for something else?" search, domain cards with first-year and renewal price, loading skeletons, a "Try again" button on errors, and the note that prices exclude taxes and fees.
 - **Review screen:** the price shown prominently, the "Nothing is purchased yet" note, a primary Confirm button and a secondary "Pick a different domain" button, and a progress panel while the site is written (about 20 seconds).
-- **Preview screen:** a language switch, a preview that fits the window, "Regenerate (N of 3 left)", and a "What's next" panel (buying the domain is shown as coming soon).
+- **Preview screen:** a language switch, a preview that fits the window, "Regenerate (N of 3 left)", and a "What's next" panel with **Buy domain** (opens the Buy step) and **Start over**.
+- **Buy screen:** see "Step 4a". The price and domain in a summary box, the agreement links with an "I have read and agree" tick, a clear demo-mode notice when it applies, **Complete demo purchase** or **Buy domain**, **Get the current price** and **Back to preview**. Afterwards a confirmation with the site shown in a frame and a link to open it (or a pending screen with **Check status**).
 - **Brand and colour.** The logo is a green tile with a "start" arrow, the wordmark "Shuru" with a turmeric dot, and "शुरू" (Hindi for "start"); the favicon uses the same mark. The palette is green plus one warm turmeric accent (`#E9A23B`) for small highlights such as the current-step ring and the tagline bar. Turmeric is never used for text on white (2.2:1 contrast); secondary text is at least 8:1 and placeholders about 5.8:1.
 - **Accessibility:** focus moves to the new screen's heading on every step change, loading and errors are announced to screen readers, the page title follows the step, and Hindi text carries `lang="hi"`.
 - Out of scope for now: dark mode, a "test environment" badge, and "continue your last site" from browser storage (section 17).
@@ -201,13 +218,13 @@ Packaging has its own tests and must not call GoDaddy.
 
 ## 8. Non-functional requirements
 
-- **Safety (hard invariant):** no purchase, hosting write or DNS write runs without Approve for that run. Covered by tests.
+- **Safety (hard invariant):** no purchase, hosting write or DNS write runs without explicit approval for that run. Today the purchase needs a stored, unexpired quote and matching accepted agreements and price (server-side), and never calls `POST /registrations` while `SHURU_DEMO_MODE` is on. Covered by tests. The separate Approve gate is added with hosting.
 - **Test money:** use the `ote` environment where possible and `--dry-run` for DNS. Buy only one cheap domain for rehearsal.
 - **Secrets:** the GoDaddy PAT, Anthropic key and the mailbox SMTP password come from environment variables, never reach the frontend, logs, git or the Docker image.
 - **Abuse and spend:** per-client limits on run creation (10 per hour, built) and contact messages (5 per hour, built), a regeneration cap per run, and a monthly spend limit in the Anthropic Console.
 - **Prompt injection:** see section 8a.
 - **Timeouts:** every external call has one; polling has an overall deadline.
-- **Recovery:** each run has a state. Built: `briefed`, `domains_listed`, `domain_chosen`, `site_generated`. Planned: `approved`, `quoted`, `purchased`, `published`, `dns_connected`, `kit_generated`, `complete`, plus `failed` from any state (architecture section 5 is the reference). If a step fails after purchase, the run keeps its state so the user can resume without buying twice. A purchase is never retried silently.
+- **Recovery:** each run has a state. Built: `briefed`, `domains_listed`, `domain_chosen`, `site_generated`, `purchasing`, `purchased`. Planned: `approved`, `published`, `dns_connected`, `kit_generated`, `complete`, plus `failed` from any state (architecture section 5 is the reference). If a step fails after purchase, the run keeps its state so the user can resume without buying twice. A purchase is never retried silently: a repeat call only checks on a pending purchase, and a retry after a timeout reuses the quote's idempotency key so the domain is not bought twice.
 - **Logging:** one line per step with command, exit code, token counts and timestamps.
 - **Performance:** brief and site each under 30 seconds; checking 5 domains under 15 seconds.
 - **Language and access:** Hindi (Devanagari) text, keyboard navigation, correct `lang` attributes on the generated site and on Hindi text in the wizard, visible focus, focus moved to each new screen, and a layout that works on phones.
@@ -262,7 +279,12 @@ Backend layout: `core/` (settings, errors, logging), `models/`, `routes/`, `serv
 | --- | --- |
 | Claude output invalid | One retry, then "Try again" |
 | No available domains | "Try different names" |
-| Quote expired | Fetch a fresh quote and show the new price |
+| Quote expired | Fetch a fresh quote and show the new price (the Buy screen does this on opening; the purchase is refused if the lock has passed) |
+| Domain taken at quote or purchase | "Sorry, that domain was just taken" |
+| Accepted price or agreements do not match the quote | Refuse (409) and ask the user to review again |
+| Quote fails (no payment method or contact on the account) | Plain "couldn't reach the domain service" message; the reason is in the logs |
+| Registration still pending after about 30 seconds | Run becomes `purchasing`; **Check status** polls without buying again |
+| Registration fails | Show error, drop the used quote, allow a new quote and retry |
 | Purchase fails before charge | Show error, keep run, allow retry |
 | Purchase succeeds, hosting fails | Keep run as `purchased`, show domain as owned, offer to retry hosting, never buy again |
 | Publish times out | Poll to deadline, show status, offer retry |
@@ -293,14 +315,14 @@ Users see plain-language messages. Raw API and CLI output goes to logs only.
 
 ## 12. Scope and plan
 
-**Must have:** steps 1 to 4 with both approval gates, domain search and quote, purchase, package and publish, DNS, live URL, replay, rate limit on run creation (done).
+**Must have:** steps 1 to 4 with both approval gates, domain search and quote, purchase (built, demo mode by default), package and publish, DNS, live URL, replay, rate limit on run creation (done).
 **Should have:** domain scout agent with a visible trace, name safety check, prompt-injection safeguards (section 8a), Hindi and English toggle, launch kit.
 **Later:** section 17.
 
 | Day | Focus | Exit criteria |
 | --- | --- | --- |
 | 1 | Payment method, PAT, practise against the test environment; FastAPI and React skeletons; Claude call 1 | Brief shows in UI; GoDaddy REST calls work; hosting plan and host install verified |
-| 2 | GoDaddy REST client, domain picker, cost review, quote and purchase behind Approve | Approve gate tested; purchase works in `ote` or on one rehearsal domain |
+| 2 | GoDaddy REST client, domain picker, cost review, quote and purchase behind Approve | Approve gate tested; purchase works in `ote` or on one rehearsal domain. Built: quote and purchase with demo mode; still to do: one real rehearsal purchase |
 | 3 | Template, Claude call 2, preview, language toggle, packaging | Zip passes section 7 checks; preview renders from real generation |
 | 4 | Upload, attach, publish with polling; DNS; confirm screen; launch kit | Live URL opens from a real run; run saved; replay works |
 | 5 | Error states, backup video, README, slide, 3 to 4 rehearsals | Rehearsals take about 10 minutes |
@@ -321,7 +343,7 @@ The live registration uses a domain bought during rehearsal. If it fails, switch
 ## 14. Success metrics
 
 - An end-to-end run from idea to live URL in about 10 minutes.
-- Zero purchases without a recorded Approve (tests and logs).
+- Zero purchases without a recorded approval (tests and logs), and zero registrations while demo mode is on.
 - At least 3 of 4 rehearsals complete unaided, each with a replay fallback.
 - Build spend within the credit plan.
 - Generated site passes packaging checks and renders in English and Hindi.

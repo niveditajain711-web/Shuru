@@ -37,14 +37,22 @@ function isBeforeSite(run: Run): boolean {
   return run.state !== "site_generated" && run.state !== "purchasing" && run.state !== "purchased";
 }
 
+/** Whether the domain purchase has started. From then on only the Buy step is open. */
+export function isBought(run: Run): boolean {
+  return run.state === "purchasing" || run.state === "purchased";
+}
+
 /**
  * Which steps the user may open. Once the site is generated the domain is locked (the backend
- * does not allow changing it), so only Idea (read-only), Preview and Buy stay open.
+ * does not allow changing it), so only Idea (read-only), Preview and Buy stay open. Once the
+ * domain is being bought or is bought, everything before Buy is locked: only Buy stays open.
  */
 export function isStepAvailable(step: Step, run: Run | null): boolean {
-  if (step === "idea") return true;
-  if (!run) return false;
+  if (!run) return step === "idea";
+  if (isBought(run)) return step === "checkout";
   switch (step) {
+    case "idea":
+      return true;
     case "domain":
       return isBeforeSite(run);
     case "review":
@@ -58,6 +66,7 @@ export function isStepAvailable(step: Step, run: Run | null): boolean {
 /** Why a step cannot be opened right now, in plain language. */
 export function unavailableHint(step: Step, run: Run | null): string {
   if (!run) return "Describe your idea first.";
+  if (isBought(run)) return "Locked once your domain is bought. Start over to make a new site.";
   if (!isBeforeSite(run)) return "Locked once your site is written. Start over to change it.";
   if (step === "review") return "Choose a domain first.";
   if (step === "preview" || step === "checkout") return "Confirm your domain first.";

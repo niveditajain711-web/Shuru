@@ -231,6 +231,30 @@ describe("checkout", () => {
     expect(window.location.hash).toBe("#/run/r1/checkout");
   });
 
+  it("locks every earlier step after the purchase and shows the site", async () => {
+    runs.r1 = makeRun({
+      state: "purchased",
+      domain: OFFER,
+      purchase: {
+        domain: "achaar1.com", status: "completed", demo: true, price: 9.19, currency: "USD",
+        registration_id: null, agreed_at: new Date().toISOString(), expires_at: null,
+      },
+    });
+    window.location.hash = "#/run/r1/preview";
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Demo purchase complete" });
+    await waitFor(() => expect(window.location.hash).toBe("#/run/r1/checkout"));
+    const nav = screen.getByRole("navigation", { name: "Progress" });
+    expect(within(nav).queryAllByRole("button")).toHaveLength(0);
+
+    expect(document.querySelector("iframe.preview")?.getAttribute("src")).toContain("/api/runs/r1/preview?lang=en");
+    expect(screen.getByRole("link", { name: "Open your site in a new tab" }).getAttribute("href")).toContain(
+      "/preview?lang=en",
+    );
+    expect(screen.getByRole("button", { name: "Start a new site" })).toBeTruthy();
+  });
+
   it("shows the confirmation when a purchased run is opened again", async () => {
     runs.r1 = makeRun({
       state: "purchased",

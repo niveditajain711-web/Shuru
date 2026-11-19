@@ -163,7 +163,7 @@ export function App() {
           </button>
         </div>
       </header>
-      <div className={step === "preview" && activeRun ? "page page-wide" : "page"}>
+      <div className={activeRun && (step === "preview" || activeRun.state === "purchased") ? "page page-wide" : "page"}>
         <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
         <main ref={main}>{renderStep()}</main>
       </div>

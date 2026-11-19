@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import type { Lang } from "../../api/types";
 import { api } from "../../api/client";
 import type { Run } from "../../api/types";
 import { useAction } from "../../hooks/useAction";
 import { formatPrice } from "../../utils/format";
 import { ErrorMessage } from "../ui/ErrorMessage";
 import { Loading } from "../ui/Loading";
+import { Segmented } from "../ui/Segmented";
 
 interface Props {
   run: Run;
@@ -191,11 +193,18 @@ function Pending({ run, onUpdated }: Pick<Props, "run" | "onUpdated">) {
   );
 }
 
+const LANGUAGES = [
+  { value: "en" as const, label: "English" },
+  { value: "hi" as const, label: <span lang="hi">हिन्दी</span> },
+];
+
 function Done({ run, onStartOver }: Pick<Props, "run" | "onStartOver">) {
+  const [lang, setLang] = useState<Lang>(run.lang);
   const purchase = run.purchase;
   if (!purchase) return null;
+  const siteUrl = api.previewUrl(run.id, lang, run.regenerations);
   return (
-    <section className="card">
+    <section className="card preview-card">
       <h1>{purchase.demo ? "Demo purchase complete" : "Your domain is registered"}</h1>
       {purchase.demo ? (
         <p className="notice" role="note">
@@ -214,6 +223,26 @@ function Done({ run, onStartOver }: Pick<Props, "run" | "onStartOver">) {
           <p className="hint">Registered until {new Date(purchase.expires_at).toLocaleDateString()}</p>
         )}
       </div>
+
+      <h2>Your site</h2>
+      <p className="hint">
+        This is your site as it will look on {purchase.domain}. Putting it live on your domain comes next, so for now
+        it is shown here.
+      </p>
+      <div className="toolbar">
+        <Segmented label="Site language" options={LANGUAGES} value={lang} onChange={setLang} />
+        <a href={siteUrl} target="_blank" rel="noopener noreferrer">
+          Open your site in a new tab
+        </a>
+      </div>
+      {/* The sandbox blocks scripts and navigation: the page is generated content, rendered as-is. */}
+      <iframe
+        className="preview"
+        title={`Your site in ${lang === "en" ? "English" : "Hindi"}`}
+        sandbox=""
+        src={siteUrl}
+      />
+
       <div className="actions">
         <button type="button" onClick={onStartOver}>
           Start a new site

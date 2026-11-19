@@ -121,6 +121,24 @@ def test_preview_still_works_after_purchase(orchestrator):
     assert "<html" in orchestrator.render_preview(run.id, Lang.EN)
 
 
+def test_nothing_earlier_can_be_redone_after_the_purchase(orchestrator):
+    run = quoted(orchestrator)
+    orchestrator.purchase(run.id, ACCEPT)
+
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.list_domains(run.id)
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.choose_domain(run.id, "achaar1.com")
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.generate_site(run.id, "achaar1.com", 12.0)
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.regenerate_site(run.id)
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.quote_purchase(run.id)
+    with pytest.raises(InvalidRunStateError):
+        orchestrator.purchase(run.id, ACCEPT)
+
+
 # --- Orchestrator: real mode (GoDaddy is faked, so nothing is bought) ---
 
 
