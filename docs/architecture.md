@@ -4,7 +4,7 @@
 
 Shuru is an **agentic solution with manual approval gates**, not a fully autonomous agent. The orchestrator (our code) owns the sequence. It calls Claude as a **generator** that returns validated JSON (brief, site, launch kit) and as a **bounded agent** for read-only legwork. The domain scout searches and checks domains with tools until it has good options. Two manual gates (cost review and Approve) stand between the agent's suggestions and anything that spends tokens on the site or money on the domain. The money path stays deterministic, testable and cheap.
 
-> **Status:** milestone 1 (idea, domain, cost review, preview, contact form, per-client rate limits) and the **purchase step** (quote, consent, purchase, with a demo mode that skips the real registration; section 5) are built. Shuru runs on the GoDaddy VPS (decided, section 11; first deploy pending). The rest (scout agent, name safety, the separate Approve gate, hosting, DNS, launch kit, replay) is design. This document is the target architecture; see `LaunchPad Simplified Build Plan.md` for the original plan and schedule (the project was called LaunchPad there).
+> **Status:** milestone 1 (idea, domain, cost review, preview, contact form, per-client rate limits) and the **purchase step** (quote, consent, purchase, with a demo mode that skips the real registration; section 5) are built. Shuru runs on the GoDaddy VPS (decided, section 11). The rest (scout agent, name safety, the separate Approve gate, hosting, DNS, launch kit, replay) is design.
 
 ## 1. Goals and non-goals
 
@@ -413,12 +413,7 @@ shuru/
 - Frontend: unit tests for the navigation rules and route parsing, plus integration tests (Vitest, Testing Library) that render the whole app against a mocked API: the full flow, stepper locking, resume from the URL, the logo confirmation and browser Back, and the Buy step (quote on opening, buy disabled until the agreement is ticked, a completed demo purchase, no re-quote while the quote is locked).
 - An end-to-end run against the GoDaddy test environment, plus one real run with a cheap domain before any demo.
 
-## 14. Open questions
-
-**Open**
-
-- Container builds not yet exercised on the VPS (first deploy pending); no CI/CD, deploys are `git pull` plus `docker compose up -d --build`.
-- Confirm the GoDaddy hosting plan supports Node.js apps (Day 1 check). A plan exists, so GoDaddy Hosting is the default and the static-host fallback is only for failures. Details to be explored later.
+## 14. Decisions made
 
 **Decided**
 

@@ -6,7 +6,6 @@
 | **Scope** | Hackathon MVP, solo build, 5 days, $100 in Claude credits |
 | **Stack** | Python (FastAPI), React (Vite), Anthropic Python SDK (with tool use for the agent steps), GoDaddy v3 REST API (`gddy` CLI later for hosting only) |
 | **Runs on** | GoDaddy Gen4 Linux VPS with Docker, at shuru.biz (decided) |
-| **Source** | `LaunchPad Simplified Build Plan.md` (the project was called LaunchPad there) |
 
 ## 1. Summary
 
