@@ -151,6 +151,29 @@ describe("homepage", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("shows the examples in Hindi when Hindi is chosen, and swaps a picked example for its twin", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const form = screen.getByRole("form", { name: "What's your business idea?" });
+    const language = within(form).getByRole("group", { name: "Language of your website" });
+
+    await user.click(within(form).getByRole("button", { name: /yoga classes online for busy/ }));
+    await user.click(within(language).getByRole("button", { name: "हिन्दी" }));
+
+    expect(within(form).queryByRole("button", { name: /yoga classes online for busy/ })).toBeNull();
+    expect(within(form).getAllByRole("button", { name: /ऑनलाइन/ }).length).toBe(3);
+    const idea = screen.getByLabelText("Your idea") as HTMLTextAreaElement;
+    expect(idea.value).toBe("व्यस्त ऑफ़िस कर्मचारियों के लिए ऑनलाइन योग कक्षाएँ");
+    expect(idea.lang).toBe("hi");
+
+    // Text the user typed themselves is left alone when the language changes.
+    await user.clear(idea);
+    await user.type(idea, "my own idea");
+    await user.click(within(language).getByRole("button", { name: "English" }));
+    expect(idea.value).toBe("my own idea");
+    expect(within(form).getByRole("button", { name: /homemade achaar in Lucknow/ })).toBeTruthy();
+  });
+
   it("moves to the idea box from the closing call to action", async () => {
     const user = userEvent.setup();
     render(<App />);

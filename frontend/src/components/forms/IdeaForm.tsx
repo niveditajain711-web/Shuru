@@ -11,11 +11,19 @@ const MAX_IDEA_LENGTH = 500;
 /** The textarea's id, so other parts of the page can move focus to it. */
 export const IDEA_INPUT_ID = "idea";
 
-const EXAMPLES = [
-  "I make homemade achaar in Lucknow and want to sell online",
-  "I teach yoga classes online for busy office workers",
-  "I run a small bakery and want customers to order cakes",
-];
+/** The same three examples in each language, in the same order, so switching language can swap one for its twin. */
+const EXAMPLES: Record<Lang, string[]> = {
+  en: [
+    "I make homemade achaar in Lucknow and want to sell online",
+    "I teach yoga classes online for busy office workers",
+    "I run a small bakery and want customers to order cakes",
+  ],
+  hi: [
+    "लखनऊ में घर के बने अचार का कारोबार, ऑनलाइन बिक्री के लिए",
+    "व्यस्त ऑफ़िस कर्मचारियों के लिए ऑनलाइन योग कक्षाएँ",
+    "एक छोटी बेकरी, जहाँ ग्राहक ऑनलाइन केक ऑर्डर कर सकें",
+  ],
+};
 
 const LANGUAGES = [
   { value: "en" as const, label: "English" },
@@ -31,6 +39,13 @@ export function IdeaForm({ onCreated }: Props) {
   const [idea, setIdea] = useState("");
   const [lang, setLang] = useState<Lang>("en");
   const { run: createRun, loading, error } = useAction(api.createRun);
+
+  // If the text is still one of the examples, switching language swaps it for the same example in the new language.
+  function handleLangChange(next: Lang) {
+    const index = EXAMPLES[lang].indexOf(idea);
+    if (index !== -1) setIdea(EXAMPLES[next][index]);
+    setLang(next);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -50,7 +65,8 @@ export function IdeaForm({ onCreated }: Props) {
           onChange={(event) => setIdea(event.target.value)}
           maxLength={MAX_IDEA_LENGTH}
           rows={3}
-          placeholder="I make homemade achaar in Lucknow and want to sell online"
+          lang={lang}
+          placeholder={EXAMPLES[lang][0]}
           required
           disabled={loading}
           aria-describedby="idea-count"
@@ -64,8 +80,8 @@ export function IdeaForm({ onCreated }: Props) {
         <span className="label" id="examples-label">
           Need inspiration? Try one of these
         </span>
-        <ul className="chips" aria-labelledby="examples-label">
-          {EXAMPLES.map((example) => (
+        <ul className="chips" aria-labelledby="examples-label" lang={lang}>
+          {EXAMPLES[lang].map((example) => (
             <li key={example}>
               <button type="button" className="chip" disabled={loading} onClick={() => setIdea(example)}>
                 {example}
@@ -77,7 +93,7 @@ export function IdeaForm({ onCreated }: Props) {
 
       <div className="field">
         <span className="label">Language of your website</span>
-        <Segmented label="Language of your website" options={LANGUAGES} value={lang} onChange={setLang} disabled={loading} />
+        <Segmented label="Language of your website" options={LANGUAGES} value={lang} onChange={handleLangChange} disabled={loading} />
       </div>
 
       <ErrorMessage message={error} />
