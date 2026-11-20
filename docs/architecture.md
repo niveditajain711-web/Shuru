@@ -85,7 +85,8 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 - Wizard with a **stepper** (Idea, Domain, Price, Site, Buy; a sixth step, Launch, is added with hosting) that shows done, current and upcoming steps. Finished steps that are still open are clickable; the rest are disabled with a plain-language hint. On narrow screens only the current step keeps its label, with "Step N of 5" above.
 - **Navigation lives in the URL hash** (`#/run/{id}/{step}`), with no router library. On load, refresh or browser Back, the frontend fetches the run with `GET /runs/{id}` and opens the step the run's state allows. A step that is locked or not reached yet is replaced in the URL by the step the run is at. The frontend holds only UI state; the run itself is the backend's.
 - Step rules mirror the backend state machine: Domain is open until the site is generated, Price (step id `review`) only while a domain is chosen, Site (step id `preview`) and Buy only once the site exists. **Once the site is generated, Domain and Review are locked** (the backend does not allow changing the domain), so Preview offers "Buy domain" and "Start over". A run in `purchasing` or `purchased` waits at Buy, and **once the purchase has started every earlier step (Idea included) is locked**: only Buy is open, with "Start a new site" as the only action. The backend enforces it too, since every earlier endpoint accepts only earlier states.
-- **The Shuru logo starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
+- **Homepage** (`HomePage`, at `#/` whenever the URL names no run): a centred message row (headline, lead, a "What you get" list of what is built today), then two equal-height cards: the idea form (`IdeaForm`) and an example (`SampleSite`: static `frontend/public/samples/sample-site.{en,hi}.html` in a sandboxed iframe inside a browser-style frame, with its own language tab). The form's switch sets only the summary language (`run.lang`); every site is written in both languages. Below the hero, one "How it works" section (steps, a row of promises, a call to action), then a footer with Support. No stepper and no API calls. The samples are rendered through the real template and content check by `backend/scripts/render_samples.py`; rerun it after changing `templates/site.html`. The existing Idea step (`IdeaStep`) now only shows a run's idea read-only.
+- **The Shuru logo goes to the homepage, which starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
 - Domain results come from the run (`run.domains`), so returning to the Domain step does not repeat the external search. The Domain step shows a compact business reminder (tagline, name-idea chips, folded details); tapping a chip runs the same keyword search as typing it.
 - Preview: the server-rendered site HTML in a sandboxed iframe, with an English/Hindi toggle and "Regenerate (N of 3 left)".
 - **Brand and styling:** one stylesheet with design tokens (spacing, type scale, colours) and primary, secondary and subtle button variants. The logo is an inline SVG component (green tile with a "start" arrow, the wordmark, a turmeric dot and "शुरू"), so there are no image assets; it is still a real button that starts a fresh run, and its decorative parts are hidden from screen readers. The palette is green plus one turmeric accent (`#E9A23B`) used only for fills and rings, never for text on white. Secondary text is at least 8:1 contrast and placeholders about 5.8:1. Dark mode is out of scope for now.
@@ -133,6 +134,8 @@ Rules:
 - Every call sets `max_tokens`. System prompt and site template are cached.
 - Output is validated against a Pydantic model; on failure, retry once with the validation error, then fail the step.
 - The template, not Claude, owns HTML and CSS. Content is escaped on render.
+
+**As built.** Calls #1 and #2 exist (`services/claude_service.py`); the scout agent and call #3 are still design. The brief call runs at low effort and the site call at medium effort, with `output_config.effort` set per call. The JSON Schema of the output model is appended to the system prompt with sorted keys, so the cached prefix is byte-stable. An answer fails if it does not parse, does not match the model, or does not pass the content check; each failure gets one retry with the exact problem fed back, and a refusal or a `max_tokens` stop is an error straight away. Each call logs model, attempt, stop reason, input, output and cache tokens, and duration (never the visitor's text). The site call runs only after the user confirms the cost, and a site can be regenerated up to `SHURU_REGENERATION_CAP` (3) times.
 
 ### 4.4 Site publishing (pluggable)
 
@@ -310,6 +313,25 @@ Quote tokens, idempotency keys and PATs are secrets: tokens and keys are never r
 - Per-client rate limit on run creation (10 per hour, `SHURU_RUN_RATE_LIMIT`), to protect Claude spend and GoDaddy quota. It is in memory, for a single backend process; a shared store would be needed to scale out.
 - Spend limit set in the Anthropic Console as a backstop.
 
+### Controls at a glance (built)
+
+| Risk | Control | Where |
+| --- | --- | --- |
+| Claude or a bug spends money | A fixed state machine; Claude has no tools; `SHURU_DEMO_MODE` defaults to on and skips `POST /registrations` | `orchestrator.py`, `purchase_service.py`, `config.py` |
+| A purchase differs from what the user saw | The server checks the quote is still locked and that the accepted agreements, price and fee acknowledgement match it | `PurchaseService.check_acceptance` |
+| A double purchase | One idempotency key per quote; a purchase only runs from `SITE_GENERATED`; a pending one is only polled | `purchase_service.py`, `gddy_client.py` |
+| Quote token leaks to the browser | Stored on `LockedQuote`; every route returns `RunResponse` with the public `Quote` | `schemas/responses.py` |
+| Going back after buying | Every earlier endpoint accepts only earlier states; the UI locks the steps and says why | `orchestrator.py`, `lib/navigation.ts` |
+| Secrets exposed | Environment variables only, held as `SecretStr`; `.env` is git-ignored and not in the image | `config.py`, `.gitignore`, `.dockerignore` |
+| Prompt injection | Tagged input, strict schema, content check, one retry, autoescaped template, sandboxed preview iframe (`sandbox=""`) | `prompts.py`, `content_check.py`, `site_service.py`, `PreviewStep.tsx` |
+| Bad input reaching GoDaddy | Domain and keyword patterns, API limits and path ids are validated before any call | `models/common.py`, `gddy_client.py` |
+| Cost and spam abuse | 10 runs and 5 contact messages per client per hour, a regeneration cap, honeypot, timeouts on every outbound call | `rate_limit.py`, `contact.py`, `config.py` |
+| Header injection in mail | `EmailMessage` rejects line breaks; the visitor goes in `Reply-To` | `mail_service.py` |
+| Leaking internals in errors | Plain messages to the user, detail to the logs only; unexpected errors return a generic message | `core/errors.py`, `main.py` |
+| Exposed backend | Caddy terminates HTTPS; the backend publishes no port; the container runs as a non-root user | `Caddyfile`, `docker-compose.yml`, `Dockerfile` |
+
+**Known limits.** No user accounts yet, so a run id acts as a capability (keep demo mode on for any public site). The rate limiter is in memory and suits one process.
+
 ## 11. Deployment and hosting
 
 **Decided:** Shuru runs on the **GoDaddy Gen4 Linux VPS (4 vCPU, 8 GB) with Docker**, OS **Ubuntu 24.04 LTS**, at **shuru.biz**. Two containers from `docker-compose.yml`: `backend` (FastAPI via uvicorn, non-root, SQLite in a volume, port 8000 not published) and `web` (Caddy: serves the built React app, proxies `/api/*` to the backend, and obtains HTTPS certificates automatically; also redirects `www`). Only ports 80 and 443 are open (`ufw`). DNS: an A record for `@` and a CNAME for `www`; the Titan mail DNS records must be left alone. The backend runs with `--proxy-headers`, so the contact-form limiter sees the real client IP from Caddy. Step-by-step commands are in the README.
@@ -359,6 +381,7 @@ shuru/
       repositories/      # run_store.py: SQLite persistence
       utils/             # rate_limit.py: in-memory per-client limiter (contact form)
       templates/         # fixed site template(s)
+    scripts/             # render_samples.py: renders the homepage's sample site through the real template
     tests/
     fixtures/            # cached runs for replay
   frontend/
@@ -366,10 +389,11 @@ shuru/
       main.tsx, App.tsx  # entry point and wizard shell (state lives in App)
       api/               # API client and shared types
       components/
+        pages/           # HomePage
         steps/           # IdeaStep, DomainStep, ReviewStep, PreviewStep, CheckoutStep
         dialogs/         # ConfirmDialog, SupportDialog
-        forms/           # ContactForm
-        ui/              # Stepper, Loading, ErrorMessage, ErrorBoundary, Segmented, Logo, BusinessSummary
+        forms/           # ContactForm, IdeaForm
+        ui/              # Stepper, Loading, ErrorMessage, ErrorBoundary, Segmented, Logo, BusinessSummary, SampleSite
       hooks/             # useAction
       lib/               # navigation (step rules) and routing (URL hash)
       utils/             # format helpers
