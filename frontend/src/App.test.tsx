@@ -119,7 +119,7 @@ afterEach(() => {
 
 async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   render(<App />);
-  await user.type(screen.getByLabelText("Your idea"), "pickles");
+  await user.type(screen.getByLabelText("What's your business idea?"), "pickles");
   await user.click(screen.getByRole("button", { name: "Create my business summary" }));
   await user.click(await screen.findByLabelText(/achaar1\.com/));
   await user.click(screen.getByRole("button", { name: "Choose this domain" }));
@@ -131,30 +131,47 @@ describe("homepage", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Turn one sentence into your own website" })).toBeTruthy();
-    expect(screen.getByLabelText("Your idea")).toBeTruthy();
+    expect(screen.getByLabelText("What's your business idea?")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "How it works" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Progress" })).toBeNull();
     expect(document.title).toBe("Shuru · Turn your idea into a website");
   });
 
-  it("switches the sample site's language without any API call", async () => {
+  it("has one language switch, which also switches the sample site and its idea, with no API call", async () => {
     const user = userEvent.setup();
     render(<App />);
     const frame = () => screen.getByTitle(/Sample site for lucknowachaar\.com/) as HTMLIFrameElement;
+    const sampleIdea = () => document.querySelector(".sample-idea q") as HTMLElement;
     expect(frame().getAttribute("src")).toBe("/samples/sample-site.en.html");
     expect(frame().getAttribute("sandbox")).toBe("");
+    expect(sampleIdea().textContent).toMatch(/homemade achaar in Lucknow/);
+    expect(screen.getAllByRole("group", { name: /language/i })).toHaveLength(1);
 
-    const sampleLanguage = screen.getByRole("group", { name: "Sample site language" });
-    await user.click(within(sampleLanguage).getByRole("button", { name: "हिन्दी" }));
+    const language = screen.getByRole("group", { name: "Language of your website" });
+    await user.click(within(language).getByRole("button", { name: "हिन्दी" }));
 
     expect(frame().getAttribute("src")).toBe("/samples/sample-site.hi.html");
+    expect(sampleIdea().textContent).toBe("लखनऊ में घर के बने अचार का कारोबार, ऑनलाइन बिक्री के लिए");
+    expect(sampleIdea().lang).toBe("hi");
     expect(calls).toHaveLength(0);
+  });
+
+  it("shows the character count only near the limit", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const count = document.getElementById("idea-count") as HTMLElement;
+    expect(count.className).toBe("sr-only");
+
+    fireEvent.change(screen.getByLabelText("What's your business idea?"), { target: { value: "a".repeat(420) } });
+    expect(count.className).toBe("hint");
+    await user.type(screen.getByLabelText("What's your business idea?"), "b".repeat(40));
+    expect(count.className).toBe("hint warn");
   });
 
   it("shows the examples in Hindi when Hindi is chosen, and swaps a picked example for its twin", async () => {
     const user = userEvent.setup();
     render(<App />);
-    const form = screen.getByRole("form", { name: "What's your business idea?" });
+    const form = screen.getByRole("form", { name: "Start a new site" });
     const language = within(form).getByRole("group", { name: "Language of your website" });
 
     await user.click(within(form).getByRole("button", { name: /yoga classes online for busy/ }));
@@ -162,7 +179,7 @@ describe("homepage", () => {
 
     expect(within(form).queryByRole("button", { name: /yoga classes online for busy/ })).toBeNull();
     expect(within(form).getAllByRole("button", { name: /ऑनलाइन/ }).length).toBe(3);
-    const idea = screen.getByLabelText("Your idea") as HTMLTextAreaElement;
+    const idea = screen.getByLabelText("What's your business idea?") as HTMLTextAreaElement;
     expect(idea.value).toBe("व्यस्त ऑफ़िस कर्मचारियों के लिए ऑनलाइन योग कक्षाएँ");
     expect(idea.lang).toBe("hi");
 
@@ -180,7 +197,7 @@ describe("homepage", () => {
 
     await user.click(screen.getByRole("button", { name: "Start my site" }));
 
-    expect(document.activeElement).toBe(screen.getByLabelText("Your idea"));
+    expect(document.activeElement).toBe(screen.getByLabelText("What's your business idea?"));
   });
 
   it("opens support from the footer", async () => {
@@ -195,7 +212,7 @@ describe("homepage", () => {
   it("shows the stepper once a run starts", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.type(screen.getByLabelText("What's your business idea?"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
 
     await screen.findByRole("heading", { name: "Choose your domain" });
@@ -207,7 +224,7 @@ describe("support dialog", () => {
   it("opens from the header, keeps wizard state, and closes on Escape", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.type(screen.getByLabelText("What's your business idea?"), "pickles");
 
     expect(screen.queryByText("Contact us")).toBeNull();
     const support = screen.getByRole("button", { name: "Support" });
@@ -220,7 +237,7 @@ describe("support dialog", () => {
     // Escape fires a cancelable "cancel" event on a native <dialog>.
     fireEvent(dialog, new Event("cancel", { cancelable: true }));
     await waitFor(() => expect(dialog.hasAttribute("open")).toBe(false));
-    expect((screen.getByLabelText("Your idea") as HTMLTextAreaElement).value).toBe("pickles");
+    expect((screen.getByLabelText("What's your business idea?") as HTMLTextAreaElement).value).toBe("pickles");
   });
 });
 
@@ -390,7 +407,7 @@ describe("after the idea is submitted", () => {
   it("goes straight to the domain step, which searches by itself", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.type(screen.getByLabelText("What's your business idea?"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
 
     await screen.findByRole("heading", { name: "Choose your domain" });
@@ -409,7 +426,7 @@ describe("after the idea is submitted", () => {
 
     await screen.findByRole("heading", { name: "Your idea" });
     expect(screen.getByText("I make pickles")).toBeTruthy();
-    expect(screen.queryByLabelText("Your idea")).toBeNull(); // no form: the idea cannot be changed
+    expect(screen.queryByLabelText("What's your business idea?")).toBeNull(); // no form: the idea cannot be changed
     expect(screen.getByText("Pickles like home")).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Back to domains" }));
@@ -429,7 +446,7 @@ describe("after the idea is submitted", () => {
 describe("domain step business summary", () => {
   async function openDomainStep(user: ReturnType<typeof userEvent.setup>) {
     render(<App />);
-    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.type(screen.getByLabelText("What's your business idea?"), "pickles");
     await user.click(screen.getByRole("button", { name: "Create my business summary" }));
       await screen.findByRole("heading", { name: "Choose your domain" });
   }
@@ -526,7 +543,7 @@ describe("logo", () => {
     expect(window.location.hash).toBe("#/run/r1/review");
 
     await user.click(within(dialog).getByRole("button", { name: "Start new site" }));
-    await screen.findByRole("heading", { name: "What's your business idea?" });
+    await screen.findByRole("heading", { level: 1, name: "Turn one sentence into your own website" });
     expect(window.location.hash).toBe("#/");
   });
 
@@ -548,7 +565,7 @@ describe("logo", () => {
     await user.click(screen.getByRole("button", { name: "Shuru" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("heading", { name: "What's your business idea?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Turn one sentence into your own website" })).toBeTruthy();
   });
 
   it("lets the browser Back button return to the earlier run", async () => {
@@ -556,7 +573,7 @@ describe("logo", () => {
     await startAndReachReview(user);
     await user.click(screen.getByRole("button", { name: "Shuru" }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Start new site" }));
-    await screen.findByRole("heading", { name: "What's your business idea?" });
+    await screen.findByRole("heading", { level: 1, name: "Turn one sentence into your own website" });
 
     window.history.back();
 

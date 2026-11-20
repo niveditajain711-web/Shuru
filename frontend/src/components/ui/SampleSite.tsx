@@ -1,31 +1,24 @@
-import { useState } from "react";
 import type { Lang } from "../../api/types";
-import { Segmented } from "./Segmented";
+import { EXAMPLES } from "../forms/IdeaForm";
 
 const SAMPLE_DOMAIN = "lucknowachaar.com";
-const SAMPLE_IDEA = "I make homemade achaar in Lucknow and want to sell online";
 
-const LANGUAGES = [
-  { value: "en" as const, label: "English" },
-  { value: "hi" as const, label: <span lang="hi">हिन्दी</span> },
-];
+interface Props {
+  /** Follows the idea form's language switch, so there is only one switch on the page. */
+  lang: Lang;
+}
 
 /**
- * A real Shuru site in a browser-style frame: the sample idea above, the site it became below.
+ * A real Shuru site in a browser-style frame, with the idea it was made from above it.
  * The pages are static files rendered once through the real site template
  * (`backend/scripts/render_samples.py`), so showing them costs no API call.
  */
-export function SampleSite() {
-  const [lang, setLang] = useState<Lang>("en");
+export function SampleSite({ lang }: Props) {
   return (
     <figure className="sample">
       <p className="sample-idea">
-        <span className="sample-idea-label">One sentence in</span>
-        <q>{SAMPLE_IDEA}</q>
+        <span className="sample-idea-label">One sentence in:</span> <q lang={lang}>{EXAMPLES[lang][0]}</q>
       </p>
-      <span className="sample-arrow" aria-hidden="true">
-        ↓
-      </span>
 
       <div className="browser">
         <div className="browser-bar">
@@ -51,10 +44,7 @@ export function SampleSite() {
         />
       </div>
 
-      <figcaption className="sample-caption">
-        <span>A website out. Made by Shuru, in both languages.</span>
-        <Segmented label="Sample site language" options={LANGUAGES} value={lang} onChange={setLang} />
-      </figcaption>
+      <figcaption className="sample-caption">A real site made by Shuru</figcaption>
     </figure>
   );
 }

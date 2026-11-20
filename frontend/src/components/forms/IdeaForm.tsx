@@ -7,12 +7,14 @@ import { Loading } from "../ui/Loading";
 import { Segmented } from "../ui/Segmented";
 
 const MAX_IDEA_LENGTH = 500;
+/** The counter shows once the text gets close to the limit; before that only screen readers hear it. */
+const SHOW_COUNT_FROM = 400;
 
 /** The textarea's id, so other parts of the page can move focus to it. */
 export const IDEA_INPUT_ID = "idea";
 
 /** The same three examples in each language, in the same order, so switching language can swap one for its twin. */
-const EXAMPLES: Record<Lang, string[]> = {
+export const EXAMPLES: Record<Lang, string[]> = {
   en: [
     "I make homemade achaar in Lucknow and want to sell online",
     "I teach yoga classes online for busy office workers",
@@ -31,20 +33,22 @@ const LANGUAGES = [
 ];
 
 interface Props {
+  /** The website's language. The page holds it, so other parts of the page (the sample site) follow it too. */
+  lang: Lang;
+  onLangChange: (lang: Lang) => void;
   onCreated: (run: Run) => void;
 }
 
 /** The form that starts a new site: one sentence about the business and the site's language. */
-export function IdeaForm({ onCreated }: Props) {
+export function IdeaForm({ lang, onLangChange, onCreated }: Props) {
   const [idea, setIdea] = useState("");
-  const [lang, setLang] = useState<Lang>("en");
   const { run: createRun, loading, error } = useAction(api.createRun);
 
   // If the text is still one of the examples, switching language swaps it for the same example in the new language.
   function handleLangChange(next: Lang) {
     const index = EXAMPLES[lang].indexOf(idea);
     if (index !== -1) setIdea(EXAMPLES[next][index]);
-    setLang(next);
+    onLangChange(next);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -54,11 +58,11 @@ export function IdeaForm({ onCreated }: Props) {
   }
 
   return (
-    <form className="card idea-form" onSubmit={handleSubmit} aria-labelledby="idea-form-title">
-      <h2 id="idea-form-title">What's your business idea?</h2>
-
+    <form className="card idea-form" onSubmit={handleSubmit} aria-label="Start a new site">
       <div className="field">
-        <label htmlFor={IDEA_INPUT_ID}>Your idea</label>
+        <label htmlFor={IDEA_INPUT_ID} className="idea-label">
+          What's your business idea?
+        </label>
         <textarea
           id={IDEA_INPUT_ID}
           value={idea}
@@ -71,7 +75,10 @@ export function IdeaForm({ onCreated }: Props) {
           disabled={loading}
           aria-describedby="idea-count"
         />
-        <p id="idea-count" className={idea.length > MAX_IDEA_LENGTH - 50 ? "hint warn" : "hint"}>
+        <p
+          id="idea-count"
+          className={idea.length > MAX_IDEA_LENGTH - 50 ? "hint warn" : idea.length > SHOW_COUNT_FROM ? "hint" : "sr-only"}
+        >
           {idea.length}/{MAX_IDEA_LENGTH}
         </p>
       </div>
