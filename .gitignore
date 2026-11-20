@@ -11,3 +11,4 @@ data/
 .DS_Store
 backend/app/.env
 backend/data
+SUBMISSION.md

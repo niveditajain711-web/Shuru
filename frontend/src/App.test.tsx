@@ -126,6 +126,60 @@ async function startAndReachReview(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByRole("heading", { name: "Check the price" });
 }
 
+describe("homepage", () => {
+  it("explains Shuru and starts with the idea form, without the stepper", async () => {
+    render(<App />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Turn one sentence into your own website" })).toBeTruthy();
+    expect(screen.getByLabelText("Your idea")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "How it works" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Progress" })).toBeNull();
+    expect(document.title).toBe("Shuru · Turn your idea into a website");
+  });
+
+  it("switches the sample site's language without any API call", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const frame = () => screen.getByTitle(/Sample site for lucknowachaar\.com/) as HTMLIFrameElement;
+    expect(frame().getAttribute("src")).toBe("/samples/sample-site.en.html");
+    expect(frame().getAttribute("sandbox")).toBe("");
+
+    const sampleLanguage = screen.getByRole("group", { name: "Sample site language" });
+    await user.click(within(sampleLanguage).getByRole("button", { name: "हिन्दी" }));
+
+    expect(frame().getAttribute("src")).toBe("/samples/sample-site.hi.html");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("moves to the idea box from the closing call to action", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Start my site" }));
+
+    expect(document.activeElement).toBe(screen.getByLabelText("Your idea"));
+  });
+
+  it("opens support from the footer", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Need help? Contact support" }));
+
+    expect(screen.getByText("Hi, need help? We reply within 1-2 days.")).toBeTruthy();
+  });
+
+  it("shows the stepper once a run starts", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(screen.getByLabelText("Your idea"), "pickles");
+    await user.click(screen.getByRole("button", { name: "Create my business summary" }));
+
+    await screen.findByRole("heading", { name: "Choose your domain" });
+    expect(screen.getByRole("navigation", { name: "Progress" })).toBeTruthy();
+  });
+});
+
 describe("support dialog", () => {
   it("opens from the header, keeps wizard state, and closes on Escape", async () => {
     const user = userEvent.setup();

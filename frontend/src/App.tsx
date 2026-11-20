@@ -6,6 +6,7 @@ import { CheckoutStep } from "./components/steps/CheckoutStep";
 import { DomainStep } from "./components/steps/DomainStep";
 import { ErrorMessage } from "./components/ui/ErrorMessage";
 import { IdeaStep } from "./components/steps/IdeaStep";
+import { HomePage } from "./components/pages/HomePage";
 import { Loading } from "./components/ui/Loading";
 import { Logo } from "./components/ui/Logo";
 import { PreviewStep } from "./components/steps/PreviewStep";
@@ -25,6 +26,7 @@ export function App() {
   const main = useRef<HTMLElement>(null);
 
   // The run in view is the one named by the URL. Without a run id in the URL, the user is at home.
+  const isHome = !route.runId;
   const activeRun = run && run.id === route.runId ? run : null;
   const step: Step =
     !activeRun || !route.step || !isStepAvailable(route.step, activeRun) ? (activeRun ? naturalStep(activeRun) : "idea") : route.step;
@@ -56,8 +58,9 @@ export function App() {
       h1.focus({ preventScroll: true });
     }
     const label = STEPS.find((s) => s.id === step)?.label;
-    document.title = heading && label ? `${label} · Shuru` : "Shuru";
-  }, [heading, activeRun?.id]);
+    if (isHome) document.title = "Shuru · Turn your idea into a website";
+    else document.title = heading && label ? `${label} · Shuru` : "Shuru";
+  }, [heading, activeRun?.id, isHome]);
 
   function goHome() {
     setConfirmingStartOver(false);
@@ -97,13 +100,7 @@ export function App() {
 
     switch (step) {
       case "idea":
-        return (
-          <IdeaStep
-            run={activeRun}
-            onCreated={(created) => updateRun(created, "domain")}
-            onContinue={() => activeRun && navigate(activeRun.id, naturalStep(activeRun))}
-          />
-        );
+        return activeRun && <IdeaStep run={activeRun} onContinue={() => navigate(activeRun.id, naturalStep(activeRun))} />;
       case "domain":
         return (
           activeRun && (
@@ -163,10 +160,17 @@ export function App() {
           </button>
         </div>
       </header>
-      <div className={activeRun && (step === "preview" || activeRun.state === "purchased") ? "page page-wide" : "page"}>
-        <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
-        <main ref={main}>{renderStep()}</main>
-      </div>
+      {isHome ? (
+        // The homepage has full-width bands and no stepper: there is no run to show progress for yet.
+        <main ref={main}>
+          <HomePage onCreated={(created) => updateRun(created, "domain")} onSupport={() => setSupportOpen(true)} />
+        </main>
+      ) : (
+        <div className={activeRun && (step === "preview" || activeRun.state === "purchased") ? "page page-wide" : "page"}>
+          <Stepper current={step} run={activeRun} onNavigate={(target) => activeRun && navigate(activeRun.id, target)} />
+          <main ref={main}>{renderStep()}</main>
+        </div>
+      )}
       <SupportDialog open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       <ConfirmDialog

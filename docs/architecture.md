@@ -85,7 +85,8 @@ English and Hindi are both **generated natively by Claude** in Claude call #2, f
 - Wizard with a **stepper** (Idea, Domain, Price, Site, Buy; a sixth step, Launch, is added with hosting) that shows done, current and upcoming steps. Finished steps that are still open are clickable; the rest are disabled with a plain-language hint. On narrow screens only the current step keeps its label, with "Step N of 5" above.
 - **Navigation lives in the URL hash** (`#/run/{id}/{step}`), with no router library. On load, refresh or browser Back, the frontend fetches the run with `GET /runs/{id}` and opens the step the run's state allows. A step that is locked or not reached yet is replaced in the URL by the step the run is at. The frontend holds only UI state; the run itself is the backend's.
 - Step rules mirror the backend state machine: Domain is open until the site is generated, Price (step id `review`) only while a domain is chosen, Site (step id `preview`) and Buy only once the site exists. **Once the site is generated, Domain and Review are locked** (the backend does not allow changing the domain), so Preview offers "Buy domain" and "Start over". A run in `purchasing` or `purchased` waits at Buy, and **once the purchase has started every earlier step (Idea included) is locked**: only Buy is open, with "Start a new site" as the only action. The backend enforces it too, since every earlier endpoint accepts only earlier states.
-- **The Shuru logo starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
+- **Homepage** (`HomePage`, at `#/` whenever the URL names no run): hero with the idea form (`IdeaForm`, shared component), a sample site (`SampleSite`: static `frontend/public/samples/sample-site.{en,hi}.html` in a sandboxed iframe inside a browser-style frame, with a language switch), "How it works", three promises, a closing call to action and a footer with Support. No stepper and no API calls. The samples are rendered through the real template and content check by `backend/scripts/render_samples.py`; rerun it after changing `templates/site.html`. The existing Idea step (`IdeaStep`) now only shows a run's idea read-only.
+- **The Shuru logo goes to the homepage, which starts a fresh run.** If a run is on screen it asks for confirmation first; the old run is not deleted and stays reachable by its link or the browser Back button.
 - Domain results come from the run (`run.domains`), so returning to the Domain step does not repeat the external search. The Domain step shows a compact business reminder (tagline, name-idea chips, folded details); tapping a chip runs the same keyword search as typing it.
 - Preview: the server-rendered site HTML in a sandboxed iframe, with an English/Hindi toggle and "Regenerate (N of 3 left)".
 - **Brand and styling:** one stylesheet with design tokens (spacing, type scale, colours) and primary, secondary and subtle button variants. The logo is an inline SVG component (green tile with a "start" arrow, the wordmark, a turmeric dot and "शुरू"), so there are no image assets; it is still a real button that starts a fresh run, and its decorative parts are hidden from screen readers. The palette is green plus one turmeric accent (`#E9A23B`) used only for fills and rings, never for text on white. Secondary text is at least 8:1 contrast and placeholders about 5.8:1. Dark mode is out of scope for now.
@@ -380,6 +381,7 @@ shuru/
       repositories/      # run_store.py: SQLite persistence
       utils/             # rate_limit.py: in-memory per-client limiter (contact form)
       templates/         # fixed site template(s)
+    scripts/             # render_samples.py: renders the homepage's sample site through the real template
     tests/
     fixtures/            # cached runs for replay
   frontend/
@@ -387,10 +389,11 @@ shuru/
       main.tsx, App.tsx  # entry point and wizard shell (state lives in App)
       api/               # API client and shared types
       components/
+        pages/           # HomePage
         steps/           # IdeaStep, DomainStep, ReviewStep, PreviewStep, CheckoutStep
         dialogs/         # ConfirmDialog, SupportDialog
-        forms/           # ContactForm
-        ui/              # Stepper, Loading, ErrorMessage, ErrorBoundary, Segmented, Logo, BusinessSummary
+        forms/           # ContactForm, IdeaForm
+        ui/              # Stepper, Loading, ErrorMessage, ErrorBoundary, Segmented, Logo, BusinessSummary, SampleSite
       hooks/             # useAction
       lib/               # navigation (step rules) and routing (URL hash)
       utils/             # format helpers
