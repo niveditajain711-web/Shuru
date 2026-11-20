@@ -137,7 +137,30 @@ describe("homepage", () => {
     expect(document.title).toBe("Shuru · Turn your idea into a website");
   });
 
-  it("has one language switch, which also switches the sample site and its idea, with no API call", async () => {
+  it("lists only what the flow delivers today", async () => {
+    render(<App />);
+
+    const youGet = screen.getByRole("list", { name: "What you get" });
+    expect(within(youGet).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "A business summary and name ideas",
+      "Available domains with real prices",
+      "A one-page website in English and हिन्दी",
+    ]);
+    expect(youGet.textContent).not.toMatch(/live/i);
+  });
+
+  it("says the site comes in both languages: the form's switch is only for the summary", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const frame = () => screen.getByTitle(/Sample site for lucknowachaar\.com/) as HTMLIFrameElement;
+    expect(screen.getByText(/Your website comes in both English and/)).toBeTruthy();
+
+    const summaryLanguage = screen.getByRole("group", { name: "Language for your summary" });
+    await user.click(within(summaryLanguage).getByRole("button", { name: "हिन्दी" }));
+    expect(frame().getAttribute("src")).toBe("/samples/sample-site.en.html");
+  });
+
+  it("switches the example's language with its own tab, with no API call", async () => {
     const user = userEvent.setup();
     render(<App />);
     const frame = () => screen.getByTitle(/Sample site for lucknowachaar\.com/) as HTMLIFrameElement;
@@ -145,10 +168,9 @@ describe("homepage", () => {
     expect(frame().getAttribute("src")).toBe("/samples/sample-site.en.html");
     expect(frame().getAttribute("sandbox")).toBe("");
     expect(sampleIdea().textContent).toMatch(/homemade achaar in Lucknow/);
-    expect(screen.getAllByRole("group", { name: /language/i })).toHaveLength(1);
 
-    const language = screen.getByRole("group", { name: "Language of your website" });
-    await user.click(within(language).getByRole("button", { name: "हिन्दी" }));
+    const view = screen.getByRole("group", { name: "View the example in" });
+    await user.click(within(view).getByRole("button", { name: "हिन्दी" }));
 
     expect(frame().getAttribute("src")).toBe("/samples/sample-site.hi.html");
     expect(sampleIdea().textContent).toBe("लखनऊ में घर के बने अचार का कारोबार, ऑनलाइन बिक्री के लिए");
@@ -172,7 +194,7 @@ describe("homepage", () => {
     const user = userEvent.setup();
     render(<App />);
     const form = screen.getByRole("form", { name: "Start a new site" });
-    const language = within(form).getByRole("group", { name: "Language of your website" });
+    const language = within(form).getByRole("group", { name: "Language for your summary" });
 
     await user.click(within(form).getByRole("button", { name: /yoga classes online for busy/ }));
     await user.click(within(language).getByRole("button", { name: "हिन्दी" }));

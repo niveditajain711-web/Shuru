@@ -33,22 +33,23 @@ const LANGUAGES = [
 ];
 
 interface Props {
-  /** The website's language. The page holds it, so other parts of the page (the sample site) follow it too. */
-  lang: Lang;
-  onLangChange: (lang: Lang) => void;
   onCreated: (run: Run) => void;
 }
 
-/** The form that starts a new site: one sentence about the business and the site's language. */
-export function IdeaForm({ lang, onLangChange, onCreated }: Props) {
+/**
+ * The form that starts a new site: one sentence about the business, and the language of the
+ * business summary. The website itself is always written in both English and Hindi.
+ */
+export function IdeaForm({ onCreated }: Props) {
   const [idea, setIdea] = useState("");
+  const [lang, setLang] = useState<Lang>("en");
   const { run: createRun, loading, error } = useAction(api.createRun);
 
   // If the text is still one of the examples, switching language swaps it for the same example in the new language.
   function handleLangChange(next: Lang) {
     const index = EXAMPLES[lang].indexOf(idea);
     if (index !== -1) setIdea(EXAMPLES[next][index]);
-    onLangChange(next);
+    setLang(next);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -99,8 +100,11 @@ export function IdeaForm({ lang, onLangChange, onCreated }: Props) {
       </div>
 
       <div className="field">
-        <span className="label">Language of your website</span>
-        <Segmented label="Language of your website" options={LANGUAGES} value={lang} onChange={handleLangChange} disabled={loading} />
+        <span className="label">Language for your summary</span>
+        <Segmented label="Language for your summary" options={LANGUAGES} value={lang} onChange={handleLangChange} disabled={loading} />
+        <p className="hint">
+          Your website comes in both English and <span lang="hi">हिन्दी</span>. You can switch between them anytime.
+        </p>
       </div>
 
       <ErrorMessage message={error} />

@@ -1,23 +1,33 @@
+import { useState } from "react";
 import type { Lang } from "../../api/types";
 import { EXAMPLES } from "../forms/IdeaForm";
+import { Segmented } from "./Segmented";
 
 const SAMPLE_DOMAIN = "lucknowachaar.com";
 
-interface Props {
-  /** Follows the idea form's language switch, so there is only one switch on the page. */
-  lang: Lang;
-}
+const LANGUAGES = [
+  { value: "en" as const, label: "English" },
+  { value: "hi" as const, label: <span lang="hi">हिन्दी</span> },
+];
 
 /**
- * A real Shuru site in a browser-style frame, with the idea it was made from above it.
- * The pages are static files rendered once through the real site template
- * (`backend/scripts/render_samples.py`), so showing them costs no API call.
+ * A real Shuru site in a browser-style frame, with the idea it was made from. Its own language tab
+ * shows that every site comes in both languages. The pages are static files rendered once through
+ * the real site template (`backend/scripts/render_samples.py`), so showing them costs no API call.
  */
-export function SampleSite({ lang }: Props) {
+export function SampleSite() {
+  const [lang, setLang] = useState<Lang>("en");
   return (
-    <figure className="sample">
+    <figure className="card sample" aria-labelledby="sample-title">
+      <div className="sample-head">
+        <h2 id="sample-title" className="sample-title">
+          Example
+        </h2>
+        <Segmented label="View the example in" options={LANGUAGES} value={lang} onChange={setLang} />
+      </div>
+
       <p className="sample-idea">
-        <span className="sample-idea-label">One sentence in:</span> <q lang={lang}>{EXAMPLES[lang][0]}</q>
+        <span className="sample-idea-label">From the idea:</span> <q lang={lang}>{EXAMPLES[lang][0]}</q>
       </p>
 
       <div className="browser">
@@ -43,8 +53,6 @@ export function SampleSite({ lang }: Props) {
           src={`/samples/sample-site.${lang}.html`}
         />
       </div>
-
-      <figcaption className="sample-caption">A real site made by Shuru</figcaption>
     </figure>
   );
 }

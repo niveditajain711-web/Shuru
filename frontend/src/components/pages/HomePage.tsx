@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import type { Lang, Run } from "../../api/types";
+import type { ReactNode } from "react";
+import type { Run } from "../../api/types";
 import { IDEA_INPUT_ID, IdeaForm } from "../forms/IdeaForm";
 import { SampleSite } from "../ui/SampleSite";
 
@@ -22,6 +22,15 @@ const HOW_IT_WORKS: { title: string; text: ReactNode }[] = [
   { title: "Buy when you're ready", text: "You see the final price and agree to the terms before anything is bought." },
 ];
 
+/** Only what the flow delivers today. Add "live on your domain" when hosting and DNS are built. */
+const YOU_GET: ReactNode[] = [
+  "A business summary and name ideas",
+  "Available domains with real prices",
+  <>
+    A one-page website in English and <span lang="hi">हिन्दी</span>
+  </>,
+];
+
 const PROMISES = [
   "Nothing is bought without you",
   "Prices before your site is written",
@@ -39,13 +48,11 @@ function focusIdeaForm() {
 
 /** The first screen: what Shuru does, the form to start, and a real sample of the result. */
 export function HomePage({ onCreated, onSupport }: Props) {
-  // One language switch (in the form) drives the examples and the sample site.
-  const [lang, setLang] = useState<Lang>("en");
-
   return (
     <div className="home">
+      {/* Two rows: the message centred across the page, then the form and the example as equal cards. */}
       <section className="hero" aria-labelledby="home-title">
-        <div className="home-inner hero-grid">
+        <div className="home-inner">
           <div className="hero-copy">
             <p className="eyebrow">
               <span lang="hi">शुरू करें</span>
@@ -55,13 +62,22 @@ export function HomePage({ onCreated, onSupport }: Props) {
             <h1 id="home-title">
               Turn one sentence into <span className="mark">your own website</span>
             </h1>
-            <p className="lead hero-lead">
-              Shuru finds a domain name for your business and writes a one-page website for it, in English or Hindi.
-            </p>
-            <IdeaForm lang={lang} onLangChange={setLang} onCreated={onCreated} />
+            <p className="lead hero-lead">Shuru finds a domain name for your business and writes a one-page website for it.</p>
+            <ul className="you-get" aria-label="What you get">
+              {YOU_GET.map((item, index) => (
+                <li key={index}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12l5 5L19 7" />
+                  </svg>
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="hero-visual">
-            <SampleSite lang={lang} />
+
+          <div className="hero-cards">
+            <IdeaForm onCreated={onCreated} />
+            <SampleSite />
           </div>
         </div>
       </section>

@@ -27,7 +27,10 @@ export function IdeaStep({ run, onContinue }: Props) {
       <blockquote className="tagline" lang={run.lang}>
         {run.idea}
       </blockquote>
-      <p className="hint">Website language: {run.lang === "en" ? "English" : <span lang="hi">हिन्दी</span>}</p>
+      <p className="hint">
+        Summary language: {run.lang === "en" ? "English" : <span lang="hi">हिन्दी</span>}. Your website comes in both
+        English and <span lang="hi">हिन्दी</span>.
+      </p>
 
       <BusinessSummary run={run} />
 
