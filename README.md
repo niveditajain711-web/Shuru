@@ -2,7 +2,7 @@
 
 One sentence in, a live website on your own domain out. See [`docs/PRD.md`](docs/PRD.md) for the product and [`docs/architecture.md`](docs/architecture.md) for the design.
 
-**Where to read more:** how Claude is used (`docs/architecture.md` section 4.3), how GoDaddy is used (section 7), the purchase and money gate (section 5) and the security controls (section 10) are all in `docs/architecture.md`. The product decisions are in `docs/PRD.md`, and a summary for reviewers is in [`SUBMISSION.md`](SUBMISSION.md).
+**Where to read more:** how Claude is used (`docs/architecture.md` section 4.3), how GoDaddy is used (section 7), the purchase and money gate (section 5) and the security controls (section 10) are all in `docs/architecture.md`. The product decisions are in `docs/PRD.md`.
 
 **Status:** idea, domain, cost review, preview and purchase. Purchase is in **demo mode** by default (`SHURU_DEMO_MODE=true`), so nothing can spend money until you turn it off. Hosting, DNS, the launch kit and replay come next.
 
