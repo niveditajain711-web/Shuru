@@ -134,6 +134,8 @@ Rules:
 - Output is validated against a Pydantic model; on failure, retry once with the validation error, then fail the step.
 - The template, not Claude, owns HTML and CSS. Content is escaped on render.
 
+**As built.** Calls #1 and #2 exist (`services/claude_service.py`); the scout agent and call #3 are still design. The brief call runs at low effort and the site call at medium effort, with `output_config.effort` set per call. The JSON Schema of the output model is appended to the system prompt with sorted keys, so the cached prefix is byte-stable. An answer fails if it does not parse, does not match the model, or does not pass the content check; each failure gets one retry with the exact problem fed back, and a refusal or a `max_tokens` stop is an error straight away. Each call logs model, attempt, stop reason, input, output and cache tokens, and duration (never the visitor's text). The site call runs only after the user confirms the cost, and a site can be regenerated up to `SHURU_REGENERATION_CAP` (3) times.
+
 ### 4.4 Site publishing (pluggable)
 
 Publishing sits behind a small interface so the hosting decision can wait:
@@ -309,6 +311,25 @@ Quote tokens, idempotency keys and PATs are secrets: tokens and keys are never r
 - **Contact form:** the SMTP password is read from settings (`SecretStr`) and never logged or sent anywhere. Mail is built with `EmailMessage`, which rejects line breaks in headers, and name and email are also pattern-checked. From is always the mailbox, the visitor goes in `Reply-To`. Abuse controls: honeypot field, in-memory per-client limit (5 per hour, single process). Behind a reverse proxy the limiter sees the proxy's address unless the proxy forwards the client IP (`uvicorn --proxy-headers --forwarded-allow-ips`), to be set when the VPS proxy is configured.
 - Per-client rate limit on run creation (10 per hour, `SHURU_RUN_RATE_LIMIT`), to protect Claude spend and GoDaddy quota. It is in memory, for a single backend process; a shared store would be needed to scale out.
 - Spend limit set in the Anthropic Console as a backstop.
+
+### Controls at a glance (built)
+
+| Risk | Control | Where |
+| --- | --- | --- |
+| Claude or a bug spends money | A fixed state machine; Claude has no tools; `SHURU_DEMO_MODE` defaults to on and skips `POST /registrations` | `orchestrator.py`, `purchase_service.py`, `config.py` |
+| A purchase differs from what the user saw | The server checks the quote is still locked and that the accepted agreements, price and fee acknowledgement match it | `PurchaseService.check_acceptance` |
+| A double purchase | One idempotency key per quote; a purchase only runs from `SITE_GENERATED`; a pending one is only polled | `purchase_service.py`, `gddy_client.py` |
+| Quote token leaks to the browser | Stored on `LockedQuote`; every route returns `RunResponse` with the public `Quote` | `schemas/responses.py` |
+| Going back after buying | Every earlier endpoint accepts only earlier states; the UI locks the steps and says why | `orchestrator.py`, `lib/navigation.ts` |
+| Secrets exposed | Environment variables only, held as `SecretStr`; `.env` is git-ignored and not in the image | `config.py`, `.gitignore`, `.dockerignore` |
+| Prompt injection | Tagged input, strict schema, content check, one retry, autoescaped template, sandboxed preview iframe (`sandbox=""`) | `prompts.py`, `content_check.py`, `site_service.py`, `PreviewStep.tsx` |
+| Bad input reaching GoDaddy | Domain and keyword patterns, API limits and path ids are validated before any call | `models/common.py`, `gddy_client.py` |
+| Cost and spam abuse | 10 runs and 5 contact messages per client per hour, a regeneration cap, honeypot, timeouts on every outbound call | `rate_limit.py`, `contact.py`, `config.py` |
+| Header injection in mail | `EmailMessage` rejects line breaks; the visitor goes in `Reply-To` | `mail_service.py` |
+| Leaking internals in errors | Plain messages to the user, detail to the logs only; unexpected errors return a generic message | `core/errors.py`, `main.py` |
+| Exposed backend | Caddy terminates HTTPS; the backend publishes no port; the container runs as a non-root user | `Caddyfile`, `docker-compose.yml`, `Dockerfile` |
+
+**Known limits.** No user accounts yet, so a run id acts as a capability (keep demo mode on for any public site). The rate limiter is in memory and suits one process.
 
 ## 11. Deployment and hosting
 
